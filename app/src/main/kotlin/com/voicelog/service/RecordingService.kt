@@ -17,6 +17,7 @@ import com.voicelog.util.AudioUtils
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.io.File
@@ -32,7 +33,7 @@ class RecordingService : Service() {
         const val FRAME_SIZE = VadDetector.FRAME_SIZE
     }
 
-    private val serviceScope = CoroutineScope(Dispatchers.IO + Job())
+    private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var recordingJob: Job? = null
     private lateinit var vad: VadDetector
     private lateinit var db: AppDatabase
@@ -82,63 +83,69 @@ class RecordingService : Service() {
             val segmentBuffer = mutableListOf<ShortArray>()
             val frame = ShortArray(FRAME_SIZE)
 
-            while (isActive) {
-                val read = audioRecord.read(frame, 0, FRAME_SIZE)
-                if (read != FRAME_SIZE) continue
+            try {
+                while (isActive) {
+                    val read = audioRecord.read(frame, 0, FRAME_SIZE)
+                    if (read != FRAME_SIZE) continue
 
-                val now = System.currentTimeMillis()
-                val isVoice = vad.isVoice(frame)
+                    val now = System.currentTimeMillis()
+                    val isVoice = vad.isVoice(frame)
 
-                if (isVoice) {
-                    lastVoiceMs = now
-                    if (!isRecording) {
-                        isRecording = true
-                        segmentStartMs = now
-                        segmentBuffer.clear()
+                    if (isVoice) {
+                        lastVoiceMs = now
+                        if (!isRecording) {
+                            isRecording = true
+                            segmentStartMs = now
+                            segmentBuffer.clear()
+                        }
+                    }
+
+                    if (isRecording) {
+                        segmentBuffer.add(frame.copyOf())
+
+                        val silenceDuration = now - lastVoiceMs
+                        val segmentDuration = now - segmentStartMs
+
+                        if (silenceDuration >= SILENCE_THRESHOLD_MS || segmentDuration >= MAX_SEGMENT_DURATION_MS) {
+                            saveSegment(segmentBuffer.toList(), segmentStartMs, ((now - segmentStartMs) / 1000).toInt())
+                            isRecording = false
+                            segmentBuffer.clear()
+                            vad.resetState()
+                        }
                     }
                 }
-
-                if (isRecording) {
-                    segmentBuffer.add(frame.copyOf())
-
-                    val silenceDuration = now - lastVoiceMs
-                    val segmentDuration = now - segmentStartMs
-
-                    if (silenceDuration >= SILENCE_THRESHOLD_MS || segmentDuration >= MAX_SEGMENT_DURATION_MS) {
-                        saveSegment(segmentBuffer.toList(), segmentStartMs, ((now - segmentStartMs) / 1000).toInt())
-                        isRecording = false
-                        segmentBuffer.clear()
-                        vad.resetState()
-                    }
-                }
+            } finally {
+                audioRecord.stop()
+                audioRecord.release()
             }
-
-            audioRecord.stop()
-            audioRecord.release()
         }
     }
 
     private suspend fun saveSegment(frames: List<ShortArray>, startedAt: Long, durationSec: Int) {
-        val combined = ShortArray(frames.sumOf { it.size })
-        var offset = 0
-        frames.forEach { frame ->
-            frame.copyInto(combined, offset)
-            offset += frame.size
-        }
+        try {
+            val combined = ShortArray(frames.sumOf { it.size })
+            var offset = 0
+            frames.forEach { frame ->
+                frame.copyInto(combined, offset)
+                offset += frame.size
+            }
 
-        val fileName = "rec_${AudioUtils.formatTimestamp(startedAt)}.wav"
-        val dir = File(filesDir, "recordings").also { it.mkdirs() }
-        val filePath = File(dir, fileName).absolutePath
+            val fileName = "rec_${AudioUtils.formatTimestamp(startedAt)}.wav"
+            val dir = File(filesDir, "recordings").also { it.mkdirs() }
+            val filePath = File(dir, fileName).absolutePath
 
-        AudioUtils.writeWavFile(filePath, combined, SAMPLE_RATE)
+            AudioUtils.writeWavFile(filePath, combined, SAMPLE_RATE)
 
-        db.recordingDao().insert(
-            Recording(
-                filePath = filePath,
-                startedAt = startedAt,
-                durationSec = durationSec
+            db.recordingDao().insert(
+                Recording(
+                    filePath = filePath,
+                    startedAt = startedAt,
+                    durationSec = durationSec
+                )
             )
-        )
+        } catch (e: Exception) {
+            android.util.Log.e("RecordingService", "Failed to save segment: ${e.message}")
+        }
     }
 
     private fun stopListening() {

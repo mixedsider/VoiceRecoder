@@ -78,7 +78,10 @@ class ProcessingWorker(
         val llamaCtx = llama.init(ModelUtils.getLlamaModelPath(ctx))
         if (llamaCtx == 0L) {
             Log.e(TAG, "Failed to initialize LLaMA")
-            return Result.failure()
+            for (recording in pending) {
+                db.recordingDao().updateStatus(recording.id, "pending")
+            }
+            return Result.retry()
         }
 
         try {
@@ -109,6 +112,12 @@ class ProcessingWorker(
         val retentionDays = ctx.getSharedPreferences("voicelog_prefs", Context.MODE_PRIVATE)
             .getInt("retention_days", 30)
         val cutoffMs = System.currentTimeMillis() - retentionDays * 86_400_000L
+        val expired = db.recordingDao().getExpiredRecordings(cutoffMs)
+        expired.forEach { rec ->
+            try { java.io.File(rec.filePath).delete() } catch (e: Exception) {
+                Log.w(TAG, "Failed to delete file: ${rec.filePath}")
+            }
+        }
         db.recordingDao().deleteExpiredRecordings(cutoffMs)
 
         Log.i(TAG, "Processing complete")

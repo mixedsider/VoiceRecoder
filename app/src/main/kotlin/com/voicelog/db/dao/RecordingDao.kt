@@ -20,6 +20,9 @@ interface RecordingDao {
     @Query("SELECT * FROM recordings ORDER BY startedAt DESC")
     fun getAllRecordings(): Flow<List<Recording>>
 
+    @Query("SELECT * FROM recordings WHERE status = 'done' AND startedAt < :cutoffMs")
+    suspend fun getExpiredRecordings(cutoffMs: Long): List<Recording>
+
     @Query("DELETE FROM recordings WHERE status = 'done' AND startedAt < :cutoffMs")
     suspend fun deleteExpiredRecordings(cutoffMs: Long)
 

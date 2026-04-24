@@ -51,18 +51,23 @@ class VadDetector(context: Context) : AutoCloseable {
             "c" to cTensor
         )
 
-        val output = session.run(inputs)
-        val prob = (output[0].value as Array<*>)[0] as FloatArray
-        val hn = output[1].value
-        val cn = output[2].value
+        return try {
+            val output = session.run(inputs)
+            val prob = (output[0].value as Array<*>)[0] as FloatArray
+            val hn = output[1].value
+            val cn = output[2].value
 
-        updateState(hn, h)
-        updateState(cn, c)
+            updateState(hn, h)
+            updateState(cn, c)
 
-        inputTensor.close(); srTensor.close(); hTensor.close(); cTensor.close()
-        output.close()
-
-        return prob[0] > VOICE_THRESHOLD
+            output.close()
+            prob[0] > VOICE_THRESHOLD
+        } finally {
+            inputTensor.close()
+            srTensor.close()
+            hTensor.close()
+            cTensor.close()
+        }
     }
 
     private fun updateState(src: Any?, dst: FloatArray) {
@@ -88,6 +93,6 @@ class VadDetector(context: Context) : AutoCloseable {
 
     override fun close() {
         session.close()
-        env.close()
+        // OrtEnvironment is a global singleton — do not close it
     }
 }

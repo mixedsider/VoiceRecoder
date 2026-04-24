@@ -8,6 +8,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.voicelog.databinding.ItemDateHeaderBinding
 import com.voicelog.databinding.ItemRecordingBinding
+import com.voicelog.databinding.ItemSummaryBinding
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -17,18 +18,21 @@ class RecordingAdapter : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(D
     companion object {
         private const val TYPE_HEADER = 0
         private const val TYPE_ITEM = 1
+        private const val TYPE_SUMMARY = 2
         private val timeFmt = SimpleDateFormat("HH:mm", Locale.KOREA)
     }
 
     override fun getItemViewType(position: Int): Int = when (getItem(position)) {
         is RecordingUiItem.Header -> TYPE_HEADER
         is RecordingUiItem.RecordingItem -> TYPE_ITEM
+        is RecordingUiItem.SummaryItem -> TYPE_SUMMARY
     }
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): RecyclerView.ViewHolder {
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
             TYPE_HEADER -> HeaderViewHolder(ItemDateHeaderBinding.inflate(inflater, parent, false))
+            TYPE_SUMMARY -> SummaryViewHolder(ItemSummaryBinding.inflate(inflater, parent, false))
             else -> ItemViewHolder(ItemRecordingBinding.inflate(inflater, parent, false))
         }
     }
@@ -37,6 +41,7 @@ class RecordingAdapter : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(D
         when (val item = getItem(position)) {
             is RecordingUiItem.Header -> (holder as HeaderViewHolder).bind(item)
             is RecordingUiItem.RecordingItem -> (holder as ItemViewHolder).bind(item)
+            is RecordingUiItem.SummaryItem -> (holder as SummaryViewHolder).bind(item)
         }
     }
 
@@ -47,14 +52,21 @@ class RecordingAdapter : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(D
         }
     }
 
+    class SummaryViewHolder(private val binding: ItemSummaryBinding) :
+        RecyclerView.ViewHolder(binding.root) {
+        fun bind(item: RecordingUiItem.SummaryItem) {
+            binding.tvSummaryText.text = item.summary.summaryText
+        }
+    }
+
     class ItemViewHolder(private val binding: ItemRecordingBinding) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(item: RecordingUiItem.RecordingItem) {
             val rec = item.recording
             val start = timeFmt.format(Date(rec.startedAt))
             val end = timeFmt.format(Date(rec.startedAt + rec.durationSec * 1000L))
-            val durationMin = rec.durationSec / 60
-            binding.tvTimeRange.text = "$start ~ $end  [${durationMin}분]"
+            val durationText = if (rec.durationSec < 60) "${rec.durationSec}초" else "${rec.durationSec / 60}분"
+            binding.tvTimeRange.text = "$start ~ $end  [$durationText]"
 
             when {
                 item.transcript != null -> {
@@ -81,6 +93,8 @@ class RecordingAdapter : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(D
                     oldItem.dateLabel == newItem.dateLabel
                 oldItem is RecordingUiItem.RecordingItem && newItem is RecordingUiItem.RecordingItem ->
                     oldItem.recording.id == newItem.recording.id
+                oldItem is RecordingUiItem.SummaryItem && newItem is RecordingUiItem.SummaryItem ->
+                    oldItem.summary.date == newItem.summary.date
                 else -> false
             }
         }
