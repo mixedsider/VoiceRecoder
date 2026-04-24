@@ -1,0 +1,6 @@
+[submodule "app/src/main/cpp/libs/whisper.cpp"]
+	path = app/src/main/cpp/libs/whisper.cpp
+	url = https://github.com/ggerganov/whisper.cpp
+[submodule "app/src/main/cpp/libs/llama.cpp"]
+	path = app/src/main/cpp/libs/llama.cpp
+	url = https://github.com/ggerganov/llama.cpp
