@@ -9,11 +9,15 @@ import androidx.recyclerview.widget.RecyclerView
 import com.voicelog.databinding.ItemDateHeaderBinding
 import com.voicelog.databinding.ItemRecordingBinding
 import com.voicelog.databinding.ItemSummaryBinding
+import com.voicelog.util.SummaryTextFormatter
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-class RecordingAdapter : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(DiffCallback()) {
+class RecordingAdapter(
+    private val onRecordingClick: (RecordingUiItem.RecordingItem) -> Unit = {},
+    private val onSummaryClick: (RecordingUiItem.SummaryItem) -> Unit = {},
+) : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(DiffCallback()) {
 
     companion object {
         private const val TYPE_HEADER = 0
@@ -32,8 +36,14 @@ class RecordingAdapter : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(D
         val inflater = LayoutInflater.from(parent.context)
         return when (viewType) {
             TYPE_HEADER -> HeaderViewHolder(ItemDateHeaderBinding.inflate(inflater, parent, false))
-            TYPE_SUMMARY -> SummaryViewHolder(ItemSummaryBinding.inflate(inflater, parent, false))
-            else -> ItemViewHolder(ItemRecordingBinding.inflate(inflater, parent, false))
+            TYPE_SUMMARY -> SummaryViewHolder(
+                ItemSummaryBinding.inflate(inflater, parent, false),
+                onSummaryClick
+            )
+            else -> ItemViewHolder(
+                ItemRecordingBinding.inflate(inflater, parent, false),
+                onRecordingClick
+            )
         }
     }
 
@@ -52,37 +62,82 @@ class RecordingAdapter : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(D
         }
     }
 
-    class SummaryViewHolder(private val binding: ItemSummaryBinding) :
+    class SummaryViewHolder(
+        private val binding: ItemSummaryBinding,
+        private val onClick: (RecordingUiItem.SummaryItem) -> Unit,
+    ) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(item: RecordingUiItem.SummaryItem) {
-            binding.tvSummaryText.text = item.summary.summaryText
+            binding.tvSummaryText.text = SummaryTextFormatter.normalize(item.summary.summaryText)
+            binding.root.setOnClickListener { onClick(item) }
         }
     }
 
-    class ItemViewHolder(private val binding: ItemRecordingBinding) :
+    class ItemViewHolder(
+        private val binding: ItemRecordingBinding,
+        private val onClick: (RecordingUiItem.RecordingItem) -> Unit,
+    ) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(item: RecordingUiItem.RecordingItem) {
             val rec = item.recording
             val start = timeFmt.format(Date(rec.startedAt))
             val end = timeFmt.format(Date(rec.startedAt + rec.durationSec * 1000L))
-            val durationText = if (rec.durationSec < 60) "${rec.durationSec}초" else "${rec.durationSec / 60}분"
+            val durationText = if (rec.durationSec < 60) {
+                "${rec.durationSec}s"
+            } else {
+                "${rec.durationSec / 60}m"
+            }
             binding.tvTimeRange.text = "$start ~ $end  [$durationText]"
 
             when {
                 item.transcript != null -> {
                     binding.tvSummary.text = item.transcript.text
-                    binding.tvStatus.visibility = View.GONE
+                    binding.tvStatus.visibility = View.VISIBLE
+                    binding.tvStatus.text = when (rec.status) {
+                        "pending", "queued" -> "Transcript ready. Summary pending."
+                        "summarizing" -> "Transcript ready. Summarizing..."
+                        "done" -> "Transcript"
+                        else -> "Transcript"
+                    }
                 }
-                rec.status == "pending" || rec.status == "transcribing" || rec.status == "summarizing" -> {
+
+                rec.status == "pending" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "처리 중... ⏳"
+                    binding.tvStatus.text = "Waiting for charging"
                 }
+
+                rec.status == "queued" -> {
+                    binding.tvSummary.text = ""
+                    binding.tvStatus.visibility = View.VISIBLE
+                    binding.tvStatus.text = "Queued for processing"
+                }
+
+                rec.status == "transcribing" -> {
+                    binding.tvSummary.text = ""
+                    binding.tvStatus.visibility = View.VISIBLE
+                    binding.tvStatus.text = "Transcribing..."
+                }
+
+                rec.status == "summarizing" -> {
+                    binding.tvSummary.text = ""
+                    binding.tvStatus.visibility = View.VISIBLE
+                    binding.tvStatus.text = "Summarizing..."
+                }
+
+                rec.status == "failed" -> {
+                    binding.tvSummary.text = ""
+                    binding.tvStatus.visibility = View.VISIBLE
+                    binding.tvStatus.text = "Processing failed"
+                }
+
                 else -> {
-                    binding.tvSummary.text = "(내용 없음)"
+                    binding.tvSummary.text = "(No content)"
                     binding.tvStatus.visibility = View.GONE
                 }
             }
+
+            binding.root.setOnClickListener { onClick(item) }
         }
     }
 
@@ -91,10 +146,13 @@ class RecordingAdapter : ListAdapter<RecordingUiItem, RecyclerView.ViewHolder>(D
             return when {
                 oldItem is RecordingUiItem.Header && newItem is RecordingUiItem.Header ->
                     oldItem.dateLabel == newItem.dateLabel
+
                 oldItem is RecordingUiItem.RecordingItem && newItem is RecordingUiItem.RecordingItem ->
                     oldItem.recording.id == newItem.recording.id
+
                 oldItem is RecordingUiItem.SummaryItem && newItem is RecordingUiItem.SummaryItem ->
                     oldItem.summary.date == newItem.summary.date
+
                 else -> false
             }
         }

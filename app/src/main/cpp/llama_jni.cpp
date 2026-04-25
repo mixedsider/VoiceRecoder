@@ -24,7 +24,7 @@ Java_com_voicelog_jni_LlamaJNI_init(JNIEnv *env, jobject, jstring modelPath) {
     llama_model_params model_params = llama_model_default_params();
     model_params.n_gpu_layers = 0;
 
-    llama_model *model = llama_load_model_from_file(path, model_params);
+    llama_model *model = llama_model_load_from_file(path, model_params);
     env->ReleaseStringUTFChars(modelPath, path);
 
     if (!model) {
@@ -37,10 +37,10 @@ Java_com_voicelog_jni_LlamaJNI_init(JNIEnv *env, jobject, jstring modelPath) {
     ctx_params.n_threads = 4;
     ctx_params.n_threads_batch = 4;
 
-    llama_context *ctx = llama_new_context_with_model(model, ctx_params);
+    llama_context *ctx = llama_init_from_model(model, ctx_params);
     if (!ctx) {
         LOGE("Failed to create llama context");
-        llama_free_model(model);
+        llama_model_free(model);
         return 0L;
     }
 
@@ -65,9 +65,10 @@ Java_com_voicelog_jni_LlamaJNI_generate(JNIEnv *env, jobject, jlong statePtr, js
     std::string promptCpp(promptStr);
     env->ReleaseStringUTFChars(prompt, promptStr);
 
+    const llama_vocab *vocab = llama_model_get_vocab(state->model);
     std::vector<llama_token> tokens(promptCpp.size() + 32);
     int n_tokens = llama_tokenize(
-        llama_get_model(state->ctx),
+        vocab,
         promptCpp.c_str(),
         static_cast<int>(promptCpp.size()),
         tokens.data(),
@@ -82,7 +83,7 @@ Java_com_voicelog_jni_LlamaJNI_generate(JNIEnv *env, jobject, jlong statePtr, js
     }
     tokens.resize(n_tokens);
 
-    llama_kv_cache_clear(state->ctx);
+    llama_memory_clear(llama_get_memory(state->ctx), true);
 
     llama_batch batch = llama_batch_get_one(tokens.data(), n_tokens);
     if (llama_decode(state->ctx, batch) != 0) {
@@ -97,10 +98,10 @@ Java_com_voicelog_jni_LlamaJNI_generate(JNIEnv *env, jobject, jlong statePtr, js
     while (n_generated < max_new_tokens) {
         llama_token token = llama_sampler_sample(state->sampler, state->ctx, -1);
 
-        if (llama_token_is_eog(llama_get_model(state->ctx), token)) break;
+        if (llama_vocab_is_eog(vocab, token)) break;
 
         char buf[256];
-        int n = llama_token_to_piece(llama_get_model(state->ctx), token, buf, sizeof(buf), 0, false);
+        int n = llama_token_to_piece(vocab, token, buf, sizeof(buf), 0, false);
         if (n > 0) result.append(buf, n);
 
         llama_batch next = llama_batch_get_one(&token, 1);
@@ -119,7 +120,7 @@ Java_com_voicelog_jni_LlamaJNI_free(JNIEnv *, jobject, jlong statePtr) {
     if (state) {
         llama_sampler_free(state->sampler);
         llama_free(state->ctx);
-        llama_free_model(state->model);
+        llama_model_free(state->model);
         delete state;
         LOGI("Llama state freed");
     }

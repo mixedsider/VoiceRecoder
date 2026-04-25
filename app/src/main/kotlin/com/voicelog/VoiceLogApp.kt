@@ -9,22 +9,45 @@ class VoiceLogApp : Application() {
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "voicelog_recording"
         const val NOTIFICATION_ID = 1
+        const val MODEL_DOWNLOAD_CHANNEL_ID = "voicelog_model_download"
+        const val PROCESSING_CHANNEL_ID = "voicelog_processing"
+        const val PROCESSING_NOTIFICATION_ID = 3
     }
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
+        createNotificationChannels()
     }
 
-    private fun createNotificationChannel() {
-        val channel = NotificationChannel(
+    private fun createNotificationChannels() {
+        val notificationManager = getSystemService(NotificationManager::class.java)
+
+        val recordingChannel = NotificationChannel(
             NOTIFICATION_CHANNEL_ID,
-            "VoiceLog 녹음",
-            NotificationManager.IMPORTANCE_LOW
+            "VoiceLog recording",
+            NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "음성 자동 감지 및 녹음 중"
+            description = "Shows microphone recording status."
         }
-        getSystemService(NotificationManager::class.java)
-            .createNotificationChannel(channel)
+
+        val modelDownloadChannel = NotificationChannel(
+            MODEL_DOWNLOAD_CHANNEL_ID,
+            "VoiceLog model download",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = "Shows first-run model download progress."
+        }
+
+        val processingChannel = NotificationChannel(
+            PROCESSING_CHANNEL_ID,
+            "VoiceLog processing",
+            NotificationManager.IMPORTANCE_LOW,
+        ).apply {
+            description = "Shows background transcription and summarization progress."
+        }
+
+        notificationManager.createNotificationChannel(recordingChannel)
+        notificationManager.createNotificationChannel(modelDownloadChannel)
+        notificationManager.createNotificationChannel(processingChannel)
     }
 }

@@ -10,6 +10,9 @@ interface TranscriptDao {
     @Insert
     suspend fun insert(transcript: Transcript): Long
 
+    @Query("DELETE FROM transcripts WHERE recordingId IN (:recordingIds)")
+    suspend fun deleteByRecordingIds(recordingIds: List<Long>)
+
     @Query("""
         SELECT t.* FROM transcripts t
         INNER JOIN recordings r ON t.recordingId = r.id
@@ -23,4 +26,7 @@ interface TranscriptDao {
 
     @Query("SELECT * FROM transcripts WHERE id = :id LIMIT 1")
     suspend fun getById(id: Long): Transcript?
+
+    @Query("SELECT recordingId FROM transcripts WHERE instr(text, char(65533)) > 0")
+    suspend fun getCorruptedRecordingIds(): List<Long>
 }

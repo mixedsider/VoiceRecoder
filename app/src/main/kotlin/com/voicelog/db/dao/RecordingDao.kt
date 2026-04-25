@@ -11,11 +11,20 @@ interface RecordingDao {
     @Insert
     suspend fun insert(recording: Recording): Long
 
-    @Query("SELECT * FROM recordings WHERE status = 'pending' ORDER BY startedAt ASC")
+    @Query("SELECT * FROM recordings WHERE status IN ('pending', 'queued') ORDER BY startedAt ASC")
     suspend fun getPendingRecordings(): List<Recording>
+
+    @Query("UPDATE recordings SET status = 'pending' WHERE status IN ('queued', 'transcribing', 'summarizing')")
+    suspend fun resetInFlightStatuses()
 
     @Query("UPDATE recordings SET status = :status WHERE id = :id")
     suspend fun updateStatus(id: Long, status: String)
+
+    @Query("UPDATE recordings SET status = 'pending' WHERE id IN (:ids)")
+    suspend fun resetToPending(ids: List<Long>)
+
+    @Query("UPDATE recordings SET status = 'queued' WHERE status = 'pending'")
+    suspend fun markPendingAsQueued(): Int
 
     @Query("SELECT * FROM recordings ORDER BY startedAt DESC")
     fun getAllRecordings(): Flow<List<Recording>>

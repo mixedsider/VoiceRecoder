@@ -44,7 +44,12 @@ class ModelUtilsTest {
 
     @Test
     fun whisperModelName_isCorrect() {
-        assertEquals("whisper-medium.bin", ModelUtils.WHISPER_MODEL_NAME)
+        assertEquals("whisper-small-transcribe-translate.tflite", ModelUtils.WHISPER_MODEL_NAME)
+    }
+
+    @Test
+    fun whisperVocabName_isCorrect() {
+        assertEquals("filters_vocab_multilingual.bin", ModelUtils.WHISPER_VOCAB_NAME)
     }
 
     @Test
@@ -57,6 +62,22 @@ class ModelUtilsTest {
         val f = File.createTempFile("model", ".bin")
         f.writeBytes(ByteArray(1) { 1 })
         assertTrue(ModelUtils.isModelFileValid(f.absolutePath))
+        f.delete()
+    }
+
+    @Test
+    fun ggufWithoutHeader_isNotValid() {
+        val f = File.createTempFile("model", ".gguf")
+        f.writeBytes(ByteArray(200) { 0 })
+        assertFalse(ModelUtils.isModelFileValid(f.absolutePath, minSizeBytes = 100))
+        f.delete()
+    }
+
+    @Test
+    fun ggufWithHeader_isValid() {
+        val f = File.createTempFile("model", ".gguf")
+        f.writeBytes(byteArrayOf('G'.code.toByte(), 'G'.code.toByte(), 'U'.code.toByte(), 'F'.code.toByte()) + ByteArray(196) { 1 })
+        assertTrue(ModelUtils.isModelFileValid(f.absolutePath, minSizeBytes = 100))
         f.delete()
     }
 }

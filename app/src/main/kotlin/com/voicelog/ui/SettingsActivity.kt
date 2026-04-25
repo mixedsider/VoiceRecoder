@@ -45,14 +45,17 @@ class SettingsActivity : AppCompatActivity() {
                     saveRetention(7)
                     binding.tilCustomDays.visibility = View.GONE
                 }
+
                 binding.radio30.id -> {
                     saveRetention(30)
                     binding.tilCustomDays.visibility = View.GONE
                 }
+
                 binding.radio90.id -> {
                     saveRetention(90)
                     binding.tilCustomDays.visibility = View.GONE
                 }
+
                 binding.radioCustom.id -> {
                     binding.tilCustomDays.visibility = View.VISIBLE
                 }
@@ -73,11 +76,14 @@ class SettingsActivity : AppCompatActivity() {
 
     private fun showModelPaths() {
         val whisperPath = ModelUtils.getWhisperModelPath(this)
+        val whisperVocabPath = ModelUtils.getWhisperVocabPath(this)
         val llamaPath = ModelUtils.getLlamaModelPath(this)
         val whisperReady = ModelUtils.isWhisperModelReady(this)
         val llamaReady = ModelUtils.isLlamaModelReady(this)
 
-        binding.tvWhisperPath.text = "Whisper: $whisperPath\n상태: ${if (whisperReady) "✓ 준비됨" else "✗ 파일 없음"}"
-        binding.tvLlamaPath.text = "LLaMA: $llamaPath\n상태: ${if (llamaReady) "✓ 준비됨" else "✗ 파일 없음"}"
+        binding.tvWhisperPath.text =
+            "Whisper: $whisperPath\nVocab: $whisperVocabPath\nStatus: ${if (whisperReady) "Ready" else "Missing"}"
+        binding.tvLlamaPath.text =
+            "LLaMA: $llamaPath\nStatus: ${if (llamaReady) "Ready" else "Missing"}"
     }
 }

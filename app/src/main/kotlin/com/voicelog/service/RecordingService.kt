@@ -14,12 +14,15 @@ import com.voicelog.db.AppDatabase
 import com.voicelog.db.entity.Recording
 import com.voicelog.ui.MainActivity
 import com.voicelog.util.AudioUtils
+import com.voicelog.worker.ProcessingScheduler
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 
 class RecordingService : Service() {
@@ -77,9 +80,10 @@ class RecordingService : Service() {
             audioRecord.startRecording()
             vad.resetState()
 
-            var isRecording = false
-            var segmentStartMs = 0L
-            var lastVoiceMs = 0L
+            var isRecording = true
+            var segmentStartMs = System.currentTimeMillis()
+            var lastVoiceMs = segmentStartMs
+            var hasDetectedVoice = false
             val segmentBuffer = mutableListOf<ShortArray>()
             val frame = ShortArray(FRAME_SIZE)
 
@@ -93,11 +97,7 @@ class RecordingService : Service() {
 
                     if (isVoice) {
                         lastVoiceMs = now
-                        if (!isRecording) {
-                            isRecording = true
-                            segmentStartMs = now
-                            segmentBuffer.clear()
-                        }
+                        hasDetectedVoice = true
                     }
 
                     if (isRecording) {
@@ -105,8 +105,11 @@ class RecordingService : Service() {
 
                         val silenceDuration = now - lastVoiceMs
                         val segmentDuration = now - segmentStartMs
+                        val shouldStopForSilence =
+                            hasDetectedVoice && silenceDuration >= SILENCE_THRESHOLD_MS
+                        val shouldStopForMax = segmentDuration >= MAX_SEGMENT_DURATION_MS
 
-                        if (silenceDuration >= SILENCE_THRESHOLD_MS || segmentDuration >= MAX_SEGMENT_DURATION_MS) {
+                        if (shouldStopForSilence || shouldStopForMax) {
                             saveSegment(segmentBuffer.toList(), segmentStartMs, ((now - segmentStartMs) / 1000).toInt())
                             isRecording = false
                             segmentBuffer.clear()
@@ -115,6 +118,17 @@ class RecordingService : Service() {
                     }
                 }
             } finally {
+                if (isRecording && segmentBuffer.isNotEmpty()) {
+                    val endedAt = System.currentTimeMillis()
+                    val durationSec = ((endedAt - segmentStartMs) / 1000L).toInt().coerceAtLeast(1)
+                    withContext(NonCancellable) {
+                        saveSegment(
+                            frames = segmentBuffer.toList(),
+                            startedAt = segmentStartMs,
+                            durationSec = durationSec
+                        )
+                    }
+                }
                 audioRecord.stop()
                 audioRecord.release()
             }
@@ -143,6 +157,10 @@ class RecordingService : Service() {
                     durationSec = durationSec
                 )
             )
+
+            if (ProcessingScheduler.isDeviceCharging(applicationContext)) {
+                ProcessingScheduler.enqueue(applicationContext)
+            }
         } catch (e: Exception) {
             android.util.Log.e("RecordingService", "Failed to save segment: ${e.message}")
         }
