@@ -6,8 +6,8 @@
     android:layout_height="wrap_content"
     android:layout_marginHorizontal="16dp"
     android:layout_marginBottom="8dp"
-    app:cardElevation="4dp"
     app:cardCornerRadius="12dp"
+    app:cardElevation="4dp"
     app:strokeColor="?attr/colorPrimary"
     app:strokeWidth="1dp">
 
@@ -20,19 +20,19 @@
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:text="일일 요약"
-            android:textSize="12sp"
-            android:textStyle="bold"
+            android:layout_marginBottom="4dp"
+            android:text="@string/daily_summary_label"
             android:textColor="?attr/colorPrimary"
-            android:layout_marginBottom="4dp" />
+            android:textSize="12sp"
+            android:textStyle="bold" />
 
         <TextView
             android:id="@+id/tvSummaryText"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:textSize="14sp"
+            android:ellipsize="end"
             android:maxLines="6"
-            android:ellipsize="end" />
+            android:textSize="14sp" />
 
     </LinearLayout>
 </com.google.android.material.card.MaterialCardView>

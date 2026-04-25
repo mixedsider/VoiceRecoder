@@ -39,7 +39,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModels()
     private val adapter = RecordingAdapter(
-        onRecordingClick = { showRecordingDetail(it) },
+        onRecordingClick = { openRecordingDetail(it) },
         onSummaryClick = { showSummaryDetail(it) }
     )
     private val workManager by lazy { WorkManager.getInstance(this) }
@@ -342,39 +342,8 @@ class MainActivity : AppCompatActivity() {
             .show()
     }
 
-    private fun showRecordingDetail(item: RecordingUiItem.RecordingItem) {
-        val rec = item.recording
-        val title = when {
-            item.transcript != null -> "Transcript"
-            rec.status == "pending" -> "Waiting for charging"
-            rec.status == "queued" -> "Queued for processing"
-            rec.status == "transcribing" -> "Transcribing"
-            rec.status == "summarizing" -> "Summarizing"
-            rec.status == "failed" -> "Processing failed"
-            else -> "Recording"
-        }
-        val message = buildString {
-            append("Time: ")
-            append(SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA).format(Date(rec.startedAt)))
-            append("\n\n")
-            append(
-                when {
-                    item.transcript != null -> item.transcript.text
-                    rec.status == "pending" -> "This recording is waiting for the device to charge before processing starts."
-                    rec.status == "queued" -> "This recording has been queued and should start processing soon."
-                    rec.status == "transcribing" -> "Speech-to-text is currently running."
-                    rec.status == "summarizing" -> "Daily summary generation is currently running."
-                    rec.status == "failed" -> "Processing failed before a final summary was created."
-                    else -> "No content available yet."
-                }
-            )
-        }
-
-        AlertDialog.Builder(this)
-            .setTitle(title)
-            .setMessage(message)
-            .setPositiveButton("OK", null)
-            .show()
+    private fun openRecordingDetail(item: RecordingUiItem.RecordingItem) {
+        startActivity(RecordingDetailActivity.createIntent(this, item.recording.id))
     }
 
     private fun showSummaryDetail(item: RecordingUiItem.SummaryItem) {
