@@ -4,6 +4,8 @@ Language: [한국어](README.ko.md) | English
 
 VoiceLog is an on-device Android voice logging app. It records speech, transcribes it with local STT models, and generates per-recording and daily summaries with local LLM models.
 
+Unlike cloud-first recording apps, VoiceLog is designed to solve the full workflow locally. After the required models are downloaded, recording, transcription, and summarization can run without an internet connection, keeping voice data on the device.
+
 The current build focuses on private local inference, configurable acceleration, battery-aware background processing, and safe CPU fallback when GPU or NNAPI acceleration is unavailable.
 
 ## Features
