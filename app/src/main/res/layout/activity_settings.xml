@@ -15,7 +15,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             app:navigationIcon="@drawable/ic_arrow_back"
-            app:title="설정" />
+            app:title="Settings" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <ScrollView
@@ -32,7 +32,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="녹음 파일 보관 기간"
+                android:text="Recording retention"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -46,27 +46,27 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:tag="7"
-                    android:text="7일" />
+                    android:text="7 days" />
 
                 <RadioButton
                     android:id="@+id/radio30"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:tag="30"
-                    android:text="30일" />
+                    android:text="30 days" />
 
                 <RadioButton
                     android:id="@+id/radio90"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:tag="90"
-                    android:text="90일" />
+                    android:text="90 days" />
 
                 <RadioButton
                     android:id="@+id/radioCustom"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="직접 입력" />
+                    android:text="Custom" />
             </RadioGroup>
 
             <com.google.android.material.textfield.TextInputLayout
@@ -74,7 +74,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="보관 기간 (일)"
+                android:hint="Retention days"
                 android:visibility="gone">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -93,7 +93,240 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="모델 파일 경로"
+                android:text="STT execution policy"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <RadioGroup
+                android:id="@+id/radioGroupSttPolicy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <RadioButton
+                    android:id="@+id/radioSttImmediate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Immediate" />
+
+                <RadioButton
+                    android:id="@+id/radioSttBatteryAware"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Battery aware" />
+
+                <RadioButton
+                    android:id="@+id/radioSttChargingOnly"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Charging only" />
+
+                <RadioButton
+                    android:id="@+id/radioSttManual"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Manual only" />
+            </RadioGroup>
+
+            <com.google.android.material.divider.MaterialDivider
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="20dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="LLM summary execution policy"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <RadioGroup
+                android:id="@+id/radioGroupSummaryPolicy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <RadioButton
+                    android:id="@+id/radioSummaryImmediate"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Immediate" />
+
+                <RadioButton
+                    android:id="@+id/radioSummaryBatteryAware"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Battery aware" />
+
+                <RadioButton
+                    android:id="@+id/radioSummaryChargingOnly"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Charging only" />
+
+                <RadioButton
+                    android:id="@+id/radioSummaryManual"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Manual only" />
+            </RadioGroup>
+
+            <com.google.android.material.divider.MaterialDivider
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="20dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Inference settings"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:id="@+id/tvInferenceSummary"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="12dp"
+                android:textSize="13sp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="4dp"
+                android:text="STT backend"
+                android:textStyle="bold" />
+
+            <RadioGroup
+                android:id="@+id/radioGroupSttBackend"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <RadioButton
+                    android:id="@+id/radioSttBackendAuto"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Auto" />
+
+                <RadioButton
+                    android:id="@+id/radioSttBackendCpu"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CPU" />
+
+                <RadioButton
+                    android:id="@+id/radioSttBackendGpu"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="GPU" />
+
+                <RadioButton
+                    android:id="@+id/radioSttBackendNpu"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="NPU / NNAPI" />
+            </RadioGroup>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="4dp"
+                android:text="STT model"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/spinnerSttModel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:layout_marginBottom="4dp"
+                android:text="LLM backend"
+                android:textStyle="bold" />
+
+            <RadioGroup
+                android:id="@+id/radioGroupLlmBackend"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content">
+
+                <RadioButton
+                    android:id="@+id/radioLlmBackendAuto"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="Auto" />
+
+                <RadioButton
+                    android:id="@+id/radioLlmBackendCpu"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="CPU" />
+
+                <RadioButton
+                    android:id="@+id/radioLlmBackendGpu"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="GPU" />
+            </RadioGroup>
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:layout_marginBottom="4dp"
+                android:text="LLM model"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/spinnerLlmModel"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="16dp"
+                android:orientation="horizontal">
+
+                <Button
+                    android:id="@+id/btnDownloadSelectedModels"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Download / retry" />
+
+                <Space
+                    android:layout_width="12dp"
+                    android:layout_height="wrap_content" />
+
+                <Button
+                    android:id="@+id/btnRefreshModelStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:text="Refresh" />
+            </LinearLayout>
+
+            <Button
+                android:id="@+id/btnDeleteSelectedModels"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Delete selected model files" />
+
+            <com.google.android.material.divider.MaterialDivider
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="20dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="Model and backend status"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -101,7 +334,7 @@
                 android:id="@+id/tvWhisperPath"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:layout_marginBottom="8dp"
+                android:layout_marginBottom="12dp"
                 android:fontFamily="monospace"
                 android:textSize="13sp" />
 

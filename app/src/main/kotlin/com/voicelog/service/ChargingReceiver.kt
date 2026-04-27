@@ -15,6 +15,6 @@ class ChargingReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         if (intent.action != Intent.ACTION_POWER_CONNECTED) return
         Log.i(TAG, "Power connected broadcast received")
-        ProcessingScheduler.enqueue(context)
+        ProcessingScheduler.maybeEnqueue(context)
     }
 }

@@ -7,13 +7,19 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import androidx.core.app.NotificationCompat
+import androidx.work.Constraints
 import androidx.work.CoroutineWorker
-import androidx.work.ForegroundInfo
-import androidx.work.WorkerParameters
 import androidx.work.Data
+import androidx.work.ForegroundInfo
+import androidx.work.NetworkType
+import androidx.work.OneTimeWorkRequest
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkerParameters
 import androidx.work.workDataOf
 import com.voicelog.VoiceLogApp
 import com.voicelog.ui.MainActivity
+import com.voicelog.util.InferencePipeline
+import com.voicelog.util.InferencePreferences
 import com.voicelog.util.ModelSpec
 import com.voicelog.util.ModelUtils
 import java.io.File
@@ -31,24 +37,54 @@ class ModelDownloadWorker(
         const val PROGRESS_PERCENT = "progress_percent"
         const val CURRENT_MODEL_NAME = "current_model_name"
         const val ERROR_MESSAGE = "error_message"
+        const val INPUT_MODEL_IDS = "input_model_ids"
         private const val NOTIFICATION_ID = 2
         private const val BUFFER_SIZE = 1024 * 1024
+
+        fun createRequest(modelIds: Array<String>? = null): OneTimeWorkRequest {
+            val builder = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
+                .setConstraints(
+                    Constraints.Builder()
+                        .setRequiredNetworkType(NetworkType.CONNECTED)
+                        .build()
+                )
+
+            if (!modelIds.isNullOrEmpty()) {
+                builder.setInputData(workDataOf(INPUT_MODEL_IDS to modelIds))
+            }
+
+            return builder.build()
+        }
     }
 
     override suspend fun doWork(): Result {
-        setForeground(createForegroundInfo("모델 다운로드 준비 중", -1))
+        setForeground(createForegroundInfo("Preparing downloads", -1))
 
         return try {
-            for (spec in ModelUtils.requiredModels) {
+            val requestedModelIds = inputData.getStringArray(INPUT_MODEL_IDS)
+                ?.toList()
+                ?.filter { it.isNotBlank() }
+            val downloadSpecs = if (requestedModelIds.isNullOrEmpty()) {
+                InferencePreferences.getRequiredModelSpecs(applicationContext)
+            } else {
+                ModelUtils.expandModelSelection(requestedModelIds)
+            }
+
+            for (spec in downloadSpecs) {
                 if (ModelUtils.isModelReady(applicationContext, spec)) {
                     continue
                 }
                 downloadModel(spec)
             }
+
             setProgress(workDataOf(PROGRESS_PERCENT to 100))
             Result.success()
         } catch (e: Exception) {
-            Result.failure(Data.Builder().putString(ERROR_MESSAGE, e.message ?: "알 수 없는 오류").build())
+            Result.failure(
+                Data.Builder()
+                    .putString(ERROR_MESSAGE, e.message ?: "Unknown download error")
+                    .build()
+            )
         }
     }
 
@@ -110,7 +146,7 @@ class ModelDownloadWorker(
             if (!ModelUtils.isModelReady(applicationContext, spec)) {
                 throw IllegalStateException("Downloaded file is incomplete: ${spec.fileName}")
             }
-            if (spec == ModelUtils.whisperSpec || spec == ModelUtils.whisperVocabSpec) {
+            if (spec.pipeline == InferencePipeline.STT) {
                 ModelUtils.deleteLegacyWhisperModelsIfPresent(applicationContext)
             }
             reportProgress(spec.displayName, 100)
@@ -134,9 +170,9 @@ class ModelDownloadWorker(
 
     private fun createForegroundInfo(modelName: String, percent: Int): ForegroundInfo {
         val contentText = when {
-            percent in 0..99 -> "$modelName 다운로드 중... $percent%"
-            percent >= 100 -> "$modelName 다운로드 완료"
-            else -> "$modelName 다운로드 준비 중"
+            percent in 0..99 -> "$modelName downloading... $percent%"
+            percent >= 100 -> "$modelName download complete"
+            else -> "$modelName preparing download..."
         }
 
         val intent = Intent(applicationContext, MainActivity::class.java)
@@ -151,7 +187,7 @@ class ModelDownloadWorker(
             applicationContext,
             VoiceLogApp.MODEL_DOWNLOAD_CHANNEL_ID,
         )
-            .setContentTitle("VoiceLog 모델 다운로드")
+            .setContentTitle("VoiceLog model download")
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(pendingIntent)

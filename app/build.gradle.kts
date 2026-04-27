@@ -65,6 +65,10 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.onnxruntime.android)
     implementation(libs.tensorflow.lite)
+    implementation(libs.tensorflow.lite.gpu)
+    runtimeOnly(libs.litertlm.android) {
+        exclude(group = "org.jetbrains.kotlin")
+    }
     implementation(libs.androidx.lifecycle.viewmodel.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.kotlinx.coroutines.android)

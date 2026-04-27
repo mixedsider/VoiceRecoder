@@ -10,7 +10,10 @@ import com.voicelog.db.entity.Recording
 import com.voicelog.db.entity.Transcript
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -41,20 +44,24 @@ class TranscriptDaoTest {
     @Test
     fun insert_andGetById_returnsInserted() = runBlocking {
         val recId = recordingDao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
-        val tId = transcriptDao.insert(Transcript(recordingId = recId, text = "안녕하세요", createdAt = 1000L))
-        val t = transcriptDao.getById(tId)
-        assertNotNull(t)
-        assertEquals("안녕하세요", t!!.text)
-        assertEquals(recId, t.recordingId)
+        val transcriptId = transcriptDao.insert(Transcript(recordingId = recId, text = "hello", createdAt = 1000L))
+
+        val transcript = transcriptDao.getById(transcriptId)
+
+        assertNotNull(transcript)
+        assertEquals("hello", transcript!!.text)
+        assertEquals(recId, transcript.recordingId)
     }
 
     @Test
     fun getByRecordingId_returnsCorrectTranscript() = runBlocking {
         val recId = recordingDao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
-        transcriptDao.insert(Transcript(recordingId = recId, text = "테스트", createdAt = 2000L))
-        val t = transcriptDao.getByRecordingId(recId)
-        assertNotNull(t)
-        assertEquals("테스트", t!!.text)
+        transcriptDao.insert(Transcript(recordingId = recId, text = "test", createdAt = 2000L))
+
+        val transcript = transcriptDao.getByRecordingId(recId)
+
+        assertNotNull(transcript)
+        assertEquals("test", transcript!!.text)
     }
 
     @Test
@@ -64,36 +71,66 @@ class TranscriptDaoTest {
     }
 
     @Test
-    fun cascadeDelete_whenRecordingDeleted() = runBlocking {
-        val recId = recordingDao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60, status = "done"))
-        val tId = transcriptDao.insert(Transcript(recordingId = recId, text = "삭제될 텍스트", createdAt = 1000L))
+    fun deleteByRecordingIds_removesRequestedRows() = runBlocking {
+        val first = recordingDao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
+        val second = recordingDao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60))
+        val firstTranscript = transcriptDao.insert(Transcript(recordingId = first, text = "first", createdAt = 1000L))
+        val secondTranscript = transcriptDao.insert(Transcript(recordingId = second, text = "second", createdAt = 2000L))
 
-        // 만료 삭제로 recording 제거 → transcript도 CASCADE 삭제
+        transcriptDao.deleteByRecordingIds(listOf(first))
+
+        assertNull(transcriptDao.getById(firstTranscript))
+        assertNotNull(transcriptDao.getById(secondTranscript))
+    }
+
+    @Test
+    fun cascadeDelete_whenRecordingDeleted() = runBlocking {
+        val recId = recordingDao.insert(
+            Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60, status = "done")
+        )
+        val transcriptId = transcriptDao.insert(
+            Transcript(recordingId = recId, text = "delete with parent", createdAt = 1000L)
+        )
+
         recordingDao.deleteExpiredRecordings(System.currentTimeMillis() + 1000L)
 
-        assertNull(transcriptDao.getById(tId))
+        assertNull(transcriptDao.getById(transcriptId))
     }
 
     @Test
     fun getTranscriptsByDate_returnsCorrectDate() = runBlocking {
-        val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+        val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
         val today = System.currentTimeMillis()
-        val todayStr = dateFmt.format(Date(today))
+        val todayStr = dateFormat.format(Date(today))
 
         val recId = recordingDao.insert(Recording(filePath = "/a.wav", startedAt = today, durationSec = 60))
-        transcriptDao.insert(Transcript(recordingId = recId, text = "오늘 내용", createdAt = today))
+        transcriptDao.insert(Transcript(recordingId = recId, text = "today text", createdAt = today))
 
         val results = transcriptDao.getTranscriptsByDate(todayStr)
+
         assertEquals(1, results.size)
-        assertEquals("오늘 내용", results[0].text)
+        assertEquals("today text", results[0].text)
     }
 
     @Test
     fun getTranscriptsByDate_wrongDate_returnsEmpty() = runBlocking {
         val recId = recordingDao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
-        transcriptDao.insert(Transcript(recordingId = recId, text = "내용", createdAt = 1000L))
+        transcriptDao.insert(Transcript(recordingId = recId, text = "content", createdAt = 1000L))
 
         val results = transcriptDao.getTranscriptsByDate("9999-12-31")
+
         assertTrue(results.isEmpty())
+    }
+
+    @Test
+    fun getCorruptedRecordingIds_returnsOnlyReplacementCharacterRows() = runBlocking {
+        val cleanRecording = recordingDao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
+        val corruptedRecording = recordingDao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60))
+        transcriptDao.insert(Transcript(recordingId = cleanRecording, text = "normal text", createdAt = 1000L))
+        transcriptDao.insert(Transcript(recordingId = corruptedRecording, text = "bad \uFFFD text", createdAt = 2000L))
+
+        val corruptedIds = transcriptDao.getCorruptedRecordingIds()
+
+        assertEquals(listOf(corruptedRecording), corruptedIds)
     }
 }

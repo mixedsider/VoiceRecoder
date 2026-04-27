@@ -9,5 +9,6 @@ data class Recording(
     val filePath: String,
     val startedAt: Long,
     val durationSec: Int,
-    val status: String = "pending"
+    val status: String = "pending",
+    val summaryText: String? = null
 )

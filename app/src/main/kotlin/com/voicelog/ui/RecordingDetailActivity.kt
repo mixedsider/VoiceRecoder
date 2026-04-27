@@ -19,7 +19,6 @@ import com.voicelog.R
 import com.voicelog.databinding.ActivityRecordingDetailBinding
 import com.voicelog.db.AppDatabase
 import com.voicelog.db.entity.Recording
-import com.voicelog.db.entity.Summary
 import com.voicelog.db.entity.Transcript
 import com.voicelog.util.SummaryTextFormatter
 import kotlinx.coroutines.Dispatchers
@@ -46,7 +45,6 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
 
     private val handler = Handler(Looper.getMainLooper())
     private val displayDateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
-    private val summaryDateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
 
     private var mediaPlayer: MediaPlayer? = null
     private var tts: TextToSpeech? = null
@@ -226,9 +224,7 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
                 val db = AppDatabase.getInstance(this@RecordingDetailActivity)
                 val recording = db.recordingDao().getById(recordingId) ?: return@withContext null
                 val transcript = db.transcriptDao().getByRecordingId(recordingId)
-                val dateKey = summaryDateFormat.format(Date(recording.startedAt))
-                val summary = db.summaryDao().getByDate(dateKey)
-                RecordingDetailState(recording, transcript, summary)
+                RecordingDetailState(recording, transcript)
             }
 
             if (detail == null) {
@@ -247,18 +243,15 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
         recordingDurationMs = recording.durationSec * 1000
 
         binding.toolbar.title = displayDateTimeFormat.format(Date(recording.startedAt))
-        binding.toolbar.subtitle = statusLabel(recording.status)
+        binding.toolbar.subtitle = displayStatusLabel(recording.status)
 
         binding.tvRecordingMeta.text = buildString {
             appendLine("${getString(R.string.detail_time_label)}: ${displayDateTimeFormat.format(Date(recording.startedAt))}")
             appendLine("${getString(R.string.detail_duration_label)}: ${formatDuration(recording.durationSec)}")
-            append("${getString(R.string.detail_status_label)}: ${statusLabel(recording.status)}")
+            append("${getString(R.string.detail_status_label)}: ${displayStatusLabel(recording.status)}")
         }
 
-        binding.tvSummaryContent.text = detail.summary?.let {
-            SummaryTextFormatter.normalize(it.summaryText)
-        } ?: missingSummaryText(recording.status)
-
+        binding.tvSummaryContent.text = buildRecordingSummary(recording, detail.transcript)
         binding.tvTranscriptContent.text = transcriptText.ifBlank {
             getString(R.string.transcript_empty)
         }
@@ -276,6 +269,20 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
         }
 
         updateTranscriptButton()
+    }
+
+    private fun buildRecordingSummary(recording: Recording, transcript: Transcript?): String {
+        val storedSummary = recording.summaryText?.trim().orEmpty()
+        if (storedSummary.isNotEmpty()) {
+            return SummaryTextFormatter.normalize(storedSummary)
+        }
+
+        val transcriptText = transcript?.text?.trim().orEmpty()
+        if (transcriptText.isEmpty()) {
+            return pendingSummaryText(recording.status)
+        }
+
+        return SummaryTextFormatter.createFallbackRecordingSummary(transcriptText)
     }
 
     private fun toggleRecordingPlayback() {
@@ -350,7 +357,6 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
         }
 
         pauseRecordingPlayback()
-
         tts?.speak(transcriptText, TextToSpeech.QUEUE_FLUSH, null, TTS_UTTERANCE_ID)
     }
 
@@ -379,6 +385,29 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
         binding.audioContainer.isVisible = position == 0
         binding.summaryContainer.isVisible = position == 1
         binding.transcriptContainer.isVisible = position == 2
+    }
+
+    private fun displayStatusLabel(status: String): String {
+        return when (status) {
+            "pending" -> "STT 대기중"
+            "queued" -> "처리 대기중"
+            "transcribing" -> "STT 처리중"
+            "transcript_ready" -> "요약 대기중"
+            "summarizing" -> "요약 생성중"
+            "failed" -> "처리 실패"
+            "done" -> "완료"
+            else -> status
+        }
+    }
+
+    private fun pendingSummaryText(status: String): String {
+        return when (status) {
+            "failed" -> getString(R.string.summary_failed)
+            "transcribing", "transcript_ready", "summarizing", "queued", "pending" -> {
+                getString(R.string.summary_pending)
+            }
+            else -> getString(R.string.summary_pending)
+        }
     }
 
     private fun statusLabel(status: String): String {
@@ -424,7 +453,6 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
 
     private data class RecordingDetailState(
         val recording: Recording,
-        val transcript: Transcript?,
-        val summary: Summary?
+        val transcript: Transcript?
     )
 }

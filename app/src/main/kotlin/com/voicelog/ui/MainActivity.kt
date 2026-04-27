@@ -1,5 +1,6 @@
 package com.voicelog.ui
 
+import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
@@ -10,10 +11,7 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
-import androidx.work.Constraints
 import androidx.work.ExistingWorkPolicy
-import androidx.work.NetworkType
-import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.voicelog.R
@@ -22,7 +20,7 @@ import com.voicelog.db.AppDatabase
 import com.voicelog.service.RecordingService
 import com.voicelog.ui.adapter.RecordingAdapter
 import com.voicelog.ui.adapter.RecordingUiItem
-import com.voicelog.util.ModelUtils
+import com.voicelog.util.InferencePreferences
 import com.voicelog.util.SummaryTextFormatter
 import com.voicelog.worker.ModelDownloadWorker
 import com.voicelog.worker.ProcessingScheduler
@@ -35,6 +33,10 @@ import java.util.Date
 import java.util.Locale
 
 class MainActivity : AppCompatActivity() {
+
+    companion object {
+        private const val REQUEST_REQUIRED_RUNTIME_PERMISSIONS = 100
+    }
 
     private lateinit var binding: ActivityMainBinding
     private val viewModel: MainViewModel by viewModels()
@@ -49,6 +51,7 @@ class MainActivity : AppCompatActivity() {
     private var lastDownloadWorkState: WorkInfo.State? = null
     private var currentDownloadWorkState: WorkInfo.State? = null
     private var lastProcessingWorkState: WorkInfo.State? = null
+    private var permissionRequestInFlight = false
     private val processingDateKeyFmt = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -67,7 +70,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         binding.fabRecord.setOnClickListener {
-            if (!ModelUtils.areAllModelsReady(this)) {
+            if (!hasMicrophonePermission()) {
+                requestRequiredRuntimePermissions()
+                return@setOnClickListener
+            }
+
+            if (!InferencePreferences.areSelectedModelsReady(this)) {
                 showMissingModelsDialog(force = true)
                 return@setOnClickListener
             }
@@ -91,12 +99,12 @@ class MainActivity : AppCompatActivity() {
         observeModelDownloads()
         observeProcessingWork()
         repairCorruptedTranscripts()
-        enqueueProcessingIfCharging()
+        enqueueEligibleProcessing()
         reconcileStaleProcessingState()
         updateModelAvailabilityUi()
-        showMissingModelsDialog()
-        requestMicrophonePermission()
-        requestNotificationPermission()
+        if (!requestRequiredRuntimePermissions()) {
+            showMissingModelsDialog()
+        }
     }
 
     private fun observeProcessingWork() {
@@ -199,7 +207,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 }
 
-                if (info == null && !ModelUtils.areAllModelsReady(this)) {
+                if (info == null && !InferencePreferences.areSelectedModelsReady(this)) {
                     showMissingModelsDialog()
                 }
 
@@ -229,11 +237,9 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun enqueueProcessingIfCharging() {
+    private fun enqueueEligibleProcessing() {
         lifecycleScope.launch(Dispatchers.IO) {
-            if (ProcessingScheduler.isDeviceCharging(this@MainActivity)) {
-                ProcessingScheduler.enqueue(this@MainActivity)
-            }
+            ProcessingScheduler.maybeEnqueue(this@MainActivity)
         }
     }
 
@@ -258,9 +264,7 @@ class MainActivity : AppCompatActivity() {
                 db.summaryDao().deleteByDate(date)
             }
 
-            if (ProcessingScheduler.isDeviceCharging(this@MainActivity)) {
-                ProcessingScheduler.enqueue(this@MainActivity)
-            }
+            ProcessingScheduler.maybeEnqueue(this@MainActivity)
         }
     }
 
@@ -276,7 +280,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateModelAvailabilityUi() {
-        val ready = ModelUtils.areAllModelsReady(this)
+        val ready = InferencePreferences.areSelectedModelsReady(this)
         binding.fabRecord.isEnabled = ready
         if (!ready && binding.toolbar.subtitle.isNullOrBlank()) {
             binding.toolbar.subtitle = "Model download required."
@@ -286,7 +290,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun showMissingModelsDialog(force: Boolean = false) {
-        if (ModelUtils.areAllModelsReady(this)) {
+        if (InferencePreferences.areSelectedModelsReady(this)) {
             return
         }
         if (!force && modelDownloadDialog?.isShowing == true) {
@@ -307,7 +311,7 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val missingNames = ModelUtils.getMissingModels(this)
+        val missingNames = InferencePreferences.getMissingModelSpecs(this)
             .joinToString(separator = "\n") { "- ${it.displayName}" }
 
         modelDownloadDialog = AlertDialog.Builder(this)
@@ -355,13 +359,9 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun enqueueModelDownload() {
-        val request = OneTimeWorkRequestBuilder<ModelDownloadWorker>()
-            .setConstraints(
-                Constraints.Builder()
-                    .setRequiredNetworkType(NetworkType.CONNECTED)
-                    .build()
-            )
-            .build()
+        val request = ModelDownloadWorker.createRequest(
+            InferencePreferences.getSelectedModelIds(this).toTypedArray()
+        )
 
         workManager.enqueueUniqueWork(
             ModelDownloadWorker.UNIQUE_WORK_NAME,
@@ -370,24 +370,33 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    private fun requestMicrophonePermission() {
-        if (checkSelfPermission(android.Manifest.permission.RECORD_AUDIO) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(android.Manifest.permission.RECORD_AUDIO), 100)
+    private fun requestRequiredRuntimePermissions(): Boolean {
+        val missingPermissions = buildList {
+            if (!hasMicrophonePermission()) {
+                add(Manifest.permission.RECORD_AUDIO)
+            }
+            if (
+                Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+            ) {
+                add(Manifest.permission.POST_NOTIFICATIONS)
+            }
         }
+
+        if (missingPermissions.isEmpty() || permissionRequestInFlight) {
+            return false
+        }
+
+        permissionRequestInFlight = true
+        requestPermissions(
+            missingPermissions.toTypedArray(),
+            REQUEST_REQUIRED_RUNTIME_PERMISSIONS,
+        )
+        return true
     }
 
-    private fun requestNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
-            return
-        }
-
-        if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) !=
-            PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 101)
-        }
+    private fun hasMicrophonePermission(): Boolean {
+        return checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
     }
 
     override fun onRequestPermissionsResult(
@@ -396,20 +405,50 @@ class MainActivity : AppCompatActivity() {
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == 100 && grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
-            AlertDialog.Builder(this)
-                .setTitle("Microphone permission required")
-                .setMessage("Voice recording needs microphone permission. Please allow it in system settings.")
-                .setPositiveButton("OK", null)
-                .show()
+        if (requestCode != REQUEST_REQUIRED_RUNTIME_PERMISSIONS) {
+            return
         }
 
-        if (requestCode == 101 && grantResults.firstOrNull() != PackageManager.PERMISSION_GRANTED) {
-            AlertDialog.Builder(this)
-                .setTitle("Notification permission recommended")
-                .setMessage("Background processing progress uses notifications. Allow notifications to see transcription progress.")
-                .setPositiveButton("OK", null)
-                .show()
+        permissionRequestInFlight = false
+        val requestedPermissions = permissions.toSet()
+        val microphoneDenied = requestedPermissions.contains(Manifest.permission.RECORD_AUDIO) &&
+            !hasMicrophonePermission()
+        val notificationDenied =
+            Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+                requestedPermissions.contains(Manifest.permission.POST_NOTIFICATIONS) &&
+                checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+
+        when {
+            microphoneDenied && notificationDenied -> {
+                AlertDialog.Builder(this)
+                    .setTitle("Permissions needed")
+                    .setMessage(
+                        "VoiceLog needs microphone permission to record voice. " +
+                            "Notification permission is recommended so you can see background recording, download, and processing progress."
+                    )
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+
+            microphoneDenied -> {
+                AlertDialog.Builder(this)
+                    .setTitle("Microphone permission required")
+                    .setMessage("Voice recording needs microphone permission. Please allow it in system settings.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+
+            notificationDenied -> {
+                AlertDialog.Builder(this)
+                    .setTitle("Notification permission recommended")
+                    .setMessage("Background processing progress uses notifications. Allow notifications to see transcription progress.")
+                    .setPositiveButton("OK", null)
+                    .show()
+            }
+        }
+
+        if (!microphoneDenied) {
+            showMissingModelsDialog()
         }
     }
 }

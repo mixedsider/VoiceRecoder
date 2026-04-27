@@ -9,7 +9,10 @@ import com.voicelog.db.entity.Recording
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -36,77 +39,139 @@ class RecordingDaoTest {
     fun insert_andGetById_returnsInserted() = runBlocking {
         val id = dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
         val rec = dao.getById(id)
+
         assertNotNull(rec)
         assertEquals("/a.wav", rec!!.filePath)
         assertEquals("pending", rec.status)
     }
 
     @Test
-    fun getPendingRecordings_returnsOnlyPending() = runBlocking {
-        dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
-        val id2 = dao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60))
-        dao.updateStatus(id2, "done")
+    fun getPendingTranscriptionRecordings_returnsPendingAndQueuedOnly() = runBlocking {
+        dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60, status = "pending"))
+        dao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60, status = "queued"))
+        dao.insert(Recording(filePath = "/c.wav", startedAt = 3000L, durationSec = 60, status = "done"))
 
-        val pending = dao.getPendingRecordings()
-        assertEquals(1, pending.size)
+        val pending = dao.getPendingTranscriptionRecordings()
+
+        assertEquals(2, pending.size)
         assertEquals("/a.wav", pending[0].filePath)
+        assertEquals("/b.wav", pending[1].filePath)
     }
 
     @Test
-    fun getPendingRecordings_orderedByStartedAt() = runBlocking {
-        dao.insert(Recording(filePath = "/b.wav", startedAt = 3000L, durationSec = 60))
-        dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
-        dao.insert(Recording(filePath = "/c.wav", startedAt = 2000L, durationSec = 60))
+    fun getPendingSummaryRecordings_returnsTranscriptReadyOnly() = runBlocking {
+        dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60, status = "pending"))
+        dao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60, status = "transcript_ready"))
+        dao.insert(Recording(filePath = "/c.wav", startedAt = 3000L, durationSec = 60, status = "summarizing"))
 
-        val pending = dao.getPendingRecordings()
-        assertEquals(3, pending.size)
-        assertEquals("/a.wav", pending[0].filePath)
-        assertEquals("/c.wav", pending[1].filePath)
-        assertEquals("/b.wav", pending[2].filePath)
+        val pending = dao.getPendingSummaryRecordings()
+
+        assertEquals(1, pending.size)
+        assertEquals("/b.wav", pending[0].filePath)
     }
 
     @Test
     fun updateStatus_changesStatus() = runBlocking {
         val id = dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
         dao.updateStatus(id, "transcribing")
+
         val rec = dao.getById(id)
+
         assertEquals("transcribing", rec!!.status)
     }
 
     @Test
-    fun getAllRecordings_flow_returnsAll() = runBlocking {
-        dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
-        dao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60))
-        val all = dao.getAllRecordings().first()
-        assertEquals(2, all.size)
+    fun updateSummaryText_changesSummaryText() = runBlocking {
+        val id = dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
+        dao.updateSummaryText(id, "hello summary")
+
+        val rec = dao.getById(id)
+
+        assertEquals("hello summary", rec!!.summaryText)
     }
 
     @Test
-    fun getAllRecordings_orderedByStartedAtDesc() = runBlocking {
+    fun markPendingAsQueued_updatesOnlyPendingRows() = runBlocking {
+        dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60, status = "pending"))
+        dao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60, status = "queued"))
+        dao.insert(Recording(filePath = "/c.wav", startedAt = 3000L, durationSec = 60, status = "done"))
+
+        val updated = dao.markPendingAsQueued()
+        val all = dao.getAllRecordings().first()
+
+        assertEquals(1, updated)
+        assertEquals(listOf("done", "queued", "queued"), all.map { it.status })
+    }
+
+    @Test
+    fun resetInFlightStatuses_restoresExpectedStates() = runBlocking {
+        dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60, status = "queued"))
+        dao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60, status = "transcribing"))
+        dao.insert(Recording(filePath = "/c.wav", startedAt = 3000L, durationSec = 60, status = "summarizing"))
+        dao.insert(Recording(filePath = "/d.wav", startedAt = 4000L, durationSec = 60, status = "done"))
+
+        dao.resetInFlightStatuses()
+
+        val all = dao.getAllRecordings().first()
+        assertEquals(listOf("done", "transcript_ready", "pending", "pending"), all.map { it.status })
+    }
+
+    @Test
+    fun resetToPending_updatesOnlyRequestedRows() = runBlocking {
+        val first = dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60, status = "done"))
+        val second = dao.insert(Recording(filePath = "/b.wav", startedAt = 2000L, durationSec = 60, status = "done"))
+
+        dao.resetToPending(listOf(first))
+
+        assertEquals("pending", dao.getById(first)!!.status)
+        assertEquals("done", dao.getById(second)!!.status)
+    }
+
+    @Test
+    fun hasAnyWithStatuses_checksPresence() = runBlocking {
+        dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60, status = "done"))
+
+        assertTrue(dao.hasAnyWithStatuses(listOf("done", "pending")))
+        assertTrue(!dao.hasAnyWithStatuses(listOf("queued", "transcribing")))
+    }
+
+    @Test
+    fun getAllRecordings_flow_returnsAllOrderedByStartedAtDesc() = runBlocking {
         dao.insert(Recording(filePath = "/a.wav", startedAt = 1000L, durationSec = 60))
         dao.insert(Recording(filePath = "/b.wav", startedAt = 3000L, durationSec = 60))
+
         val all = dao.getAllRecordings().first()
+
+        assertEquals(2, all.size)
         assertEquals("/b.wav", all[0].filePath)
         assertEquals("/a.wav", all[1].filePath)
     }
 
     @Test
-    fun deleteExpiredRecordings_removesOnlyDoneAndExpired() = runBlocking {
-        val idOldDone = dao.insert(Recording(filePath = "/old.wav", startedAt = 1000L, durationSec = 60))
-        dao.updateStatus(idOldDone, "done")
-        val idNewDone = dao.insert(Recording(filePath = "/new.wav", startedAt = System.currentTimeMillis(), durationSec = 60))
-        dao.updateStatus(idNewDone, "done")
-        val idPending = dao.insert(Recording(filePath = "/pending.wav", startedAt = 1000L, durationSec = 60))
+    fun getExpiredRecordings_returnsOnlyDoneAndExpired() = runBlocking {
+        val oldDone = dao.insert(Recording(filePath = "/old.wav", startedAt = 1000L, durationSec = 60, status = "done"))
+        dao.insert(Recording(filePath = "/new.wav", startedAt = System.currentTimeMillis(), durationSec = 60, status = "done"))
+        dao.insert(Recording(filePath = "/pending.wav", startedAt = 1000L, durationSec = 60, status = "pending"))
 
-        val cutoff = System.currentTimeMillis() - 1000L
-        dao.deleteExpiredRecordings(cutoff)
+        val expired = dao.getExpiredRecordings(System.currentTimeMillis() - 1000L)
+
+        assertEquals(1, expired.size)
+        assertEquals(oldDone, expired[0].id)
+    }
+
+    @Test
+    fun deleteExpiredRecordings_removesOnlyDoneAndExpired() = runBlocking {
+        val oldDone = dao.insert(Recording(filePath = "/old.wav", startedAt = 1000L, durationSec = 60, status = "done"))
+        val newDone = dao.insert(Recording(filePath = "/new.wav", startedAt = System.currentTimeMillis(), durationSec = 60, status = "done"))
+        val pending = dao.insert(Recording(filePath = "/pending.wav", startedAt = 1000L, durationSec = 60, status = "pending"))
+
+        dao.deleteExpiredRecordings(System.currentTimeMillis() - 1000L)
 
         val all = dao.getAllRecordings().first()
-        // old+done 삭제됨, new+done 및 pending 남아있음
         assertEquals(2, all.size)
-        assertNull(dao.getById(idOldDone))
-        assertNotNull(dao.getById(idNewDone))
-        assertNotNull(dao.getById(idPending))
+        assertNull(dao.getById(oldDone))
+        assertNotNull(dao.getById(newDone))
+        assertNotNull(dao.getById(pending))
     }
 
     @Test

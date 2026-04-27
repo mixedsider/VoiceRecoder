@@ -94,41 +94,48 @@ class RecordingAdapter(
                     binding.tvSummary.text = item.transcript.text
                     binding.tvStatus.visibility = View.VISIBLE
                     binding.tvStatus.text = when (rec.status) {
-                        "pending", "queued" -> "Transcript ready. Summary pending."
-                        "summarizing" -> "Transcript ready. Summarizing..."
-                        "done" -> "Transcript"
-                        else -> "Transcript"
+                        "transcript_ready" -> "STT 완료, 요약 대기중"
+                        "pending", "queued" -> "처리 대기중"
+                        "summarizing" -> "STT 완료, 요약 생성중"
+                        "done" -> "STT 완료"
+                        else -> "STT 완료"
                     }
                 }
 
                 rec.status == "pending" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "Waiting for charging"
+                    binding.tvStatus.text = "STT 대기중"
                 }
 
                 rec.status == "queued" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "Queued for processing"
+                    binding.tvStatus.text = "STT 처리 대기중"
                 }
 
                 rec.status == "transcribing" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "Transcribing..."
+                    binding.tvStatus.text = "STT 처리중"
+                }
+
+                rec.status == "transcript_ready" -> {
+                    binding.tvSummary.text = ""
+                    binding.tvStatus.visibility = View.VISIBLE
+                    binding.tvStatus.text = "요약 대기중"
                 }
 
                 rec.status == "summarizing" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "Summarizing..."
+                    binding.tvStatus.text = "요약 생성중"
                 }
 
                 rec.status == "failed" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "Processing failed"
+                    binding.tvStatus.text = "처리 실패"
                 }
 
                 else -> {

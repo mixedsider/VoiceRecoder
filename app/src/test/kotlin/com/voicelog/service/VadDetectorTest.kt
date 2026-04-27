@@ -49,6 +49,11 @@ class VadDetectorTest {
     }
 
     @Test
+    fun recordingSegmentDuration_isOneMinute() {
+        assertEquals(60_000L, RecordingService.FIXED_SEGMENT_DURATION_MS)
+    }
+
+    @Test
     fun hiddenStateSize_is128() {
         // 2 layers * 1 batch * 64 hidden = 128
         val expectedSize = 2 * 1 * 64

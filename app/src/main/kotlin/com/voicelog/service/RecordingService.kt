@@ -8,6 +8,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import com.voicelog.VoiceLogApp
 import com.voicelog.db.AppDatabase
@@ -30,10 +31,10 @@ class RecordingService : Service() {
     companion object {
         const val ACTION_START = "com.voicelog.START_RECORDING"
         const val ACTION_STOP = "com.voicelog.STOP_RECORDING"
-        const val MAX_SEGMENT_DURATION_MS = 3 * 60 * 1000L
-        const val SILENCE_THRESHOLD_MS = 1500L
+        const val FIXED_SEGMENT_DURATION_MS = 60 * 1000L
         const val SAMPLE_RATE = VadDetector.SAMPLE_RATE
         const val FRAME_SIZE = VadDetector.FRAME_SIZE
+        private const val TAG = "RecordingService"
     }
 
     private val serviceScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -62,6 +63,11 @@ class RecordingService : Service() {
     }
 
     private fun startListening() {
+        if (recordingJob?.isActive == true) {
+            Log.i(TAG, "Recording listener is already active; ignoring duplicate start")
+            return
+        }
+
         recordingJob = serviceScope.launch {
             val bufferSize = AudioRecord.getMinBufferSize(
                 SAMPLE_RATE,
@@ -80,10 +86,8 @@ class RecordingService : Service() {
             audioRecord.startRecording()
             vad.resetState()
 
-            var isRecording = true
-            var segmentStartMs = System.currentTimeMillis()
-            var lastVoiceMs = segmentStartMs
-            var hasDetectedVoice = false
+            var isRecording = false
+            var segmentStartMs = 0L
             val segmentBuffer = mutableListOf<ShortArray>()
             val frame = ShortArray(FRAME_SIZE)
 
@@ -95,25 +99,24 @@ class RecordingService : Service() {
                     val now = System.currentTimeMillis()
                     val isVoice = vad.isVoice(frame)
 
-                    if (isVoice) {
-                        lastVoiceMs = now
-                        hasDetectedVoice = true
+                    if (!isRecording && isVoice) {
+                        isRecording = true
+                        segmentStartMs = now
+                        segmentBuffer.clear()
+                        Log.i(TAG, "Voice detected; starting fixed 60s recording segment")
                     }
 
                     if (isRecording) {
                         segmentBuffer.add(frame.copyOf())
 
-                        val silenceDuration = now - lastVoiceMs
                         val segmentDuration = now - segmentStartMs
-                        val shouldStopForSilence =
-                            hasDetectedVoice && silenceDuration >= SILENCE_THRESHOLD_MS
-                        val shouldStopForMax = segmentDuration >= MAX_SEGMENT_DURATION_MS
-
-                        if (shouldStopForSilence || shouldStopForMax) {
-                            saveSegment(segmentBuffer.toList(), segmentStartMs, ((now - segmentStartMs) / 1000).toInt())
+                        if (segmentDuration >= FIXED_SEGMENT_DURATION_MS) {
+                            val durationSec = (segmentDuration / 1000L).toInt().coerceAtLeast(1)
+                            saveSegment(segmentBuffer.toList(), segmentStartMs, durationSec)
                             isRecording = false
                             segmentBuffer.clear()
                             vad.resetState()
+                            Log.i(TAG, "Fixed recording segment saved; returning to voice detection")
                         }
                     }
                 }
@@ -158,11 +161,9 @@ class RecordingService : Service() {
                 )
             )
 
-            if (ProcessingScheduler.isDeviceCharging(applicationContext)) {
-                ProcessingScheduler.enqueue(applicationContext)
-            }
+            ProcessingScheduler.maybeEnqueue(applicationContext)
         } catch (e: Exception) {
-            android.util.Log.e("RecordingService", "Failed to save segment: ${e.message}")
+            Log.e(TAG, "Failed to save segment: ${e.message}", e)
         }
     }
 

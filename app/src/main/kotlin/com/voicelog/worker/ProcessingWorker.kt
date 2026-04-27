@@ -13,9 +13,20 @@ import com.voicelog.db.AppDatabase
 import com.voicelog.db.entity.Recording
 import com.voicelog.db.entity.Summary
 import com.voicelog.db.entity.Transcript
-import com.voicelog.jni.LlamaJNI
+import com.voicelog.inference.EngineWarmUpMetrics
+import com.voicelog.inference.SummaryMetrics
+import com.voicelog.inference.SummaryEngineFactory
+import com.voicelog.inference.SummaryPromptBuilder
+import com.voicelog.inference.TranscriptionMetrics
+import com.voicelog.inference.TranscriptionEngine
+import com.voicelog.inference.WhisperTranscriptionEngine
+import com.voicelog.util.BackendResolution
+import com.voicelog.util.InferencePreferences
+import com.voicelog.util.InferenceRuntime
 import com.voicelog.util.ModelUtils
+import com.voicelog.util.ProcessingPreferences
 import com.voicelog.util.SummaryTextFormatter
+import android.os.SystemClock
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -31,8 +42,8 @@ class ProcessingWorker(
 
         private const val TAG = "ProcessingWorker"
         private const val WHISPER_TRANSCRIBE_TIMEOUT_MS = 30_000
-        private const val STATUS_PENDING = "pending"
         private const val STATUS_TRANSCRIBING = "transcribing"
+        private const val STATUS_TRANSCRIPT_READY = "transcript_ready"
         private const val STATUS_SUMMARIZING = "summarizing"
         private const val STATUS_DONE = "done"
         private const val STATUS_FAILED = "failed"
@@ -43,108 +54,235 @@ class ProcessingWorker(
     override suspend fun doWork(): Result {
         val ctx = applicationContext
         val db = AppDatabase.getInstance(ctx)
+        val canRunStt = ProcessingPreferences.shouldRunSttNow(ctx)
+        val canRunSummary = ProcessingPreferences.shouldRunSummaryNow(ctx)
 
         Log.i(TAG, "Processing worker started")
         setForeground(createForegroundInfo("Preparing models"))
 
-        if (!ModelUtils.isWhisperModelReady(ctx) || !ModelUtils.isLlamaModelReady(ctx)) {
-            Log.e(TAG, "Model files not ready")
-            return Result.failure()
+        if (!canRunStt && !canRunSummary) {
+            Log.i(TAG, "Skipping work because current policies do not allow processing right now")
+            return Result.success()
         }
 
-        val pending = db.recordingDao().getPendingRecordings()
-        Log.i(TAG, "Pending recordings: ${pending.size}")
-        if (pending.isEmpty()) {
+        val pendingTranscriptions = if (canRunStt) {
+            db.recordingDao().getPendingTranscriptionRecordings()
+        } else {
+            emptyList()
+        }
+        val pendingSummaries = if (canRunSummary) {
+            db.recordingDao().getPendingSummaryRecordings()
+        } else {
+            emptyList()
+        }
+
+        val needsWhisper = pendingTranscriptions.isNotEmpty()
+        val needsLlama = canRunSummary &&
+            (pendingTranscriptions.isNotEmpty() || pendingSummaries.isNotEmpty())
+        val sttResolution = InferenceRuntime.resolveStt(ctx)
+        val selectedLlmModel = InferencePreferences.getSelectedLlmModel(ctx)
+        val readyLlmModel = if (needsLlama) {
+            InferencePreferences.getReadyLlmModelOrFallback(ctx)
+        } else {
+            selectedLlmModel
+        }
+        val llmResolution = InferenceRuntime.resolveLlm(ctx, readyLlmModel ?: selectedLlmModel)
+
+        if (needsWhisper && !InferencePreferences.isSelectedSttModelReady(ctx)) {
+            Log.e(TAG, "Whisper model files not ready")
+            return Result.failure()
+        }
+        if (needsLlama && readyLlmModel == null) {
+            Log.e(TAG, "No ready LLM model files are available for summary")
+            return Result.failure()
+        }
+        if (needsLlama && readyLlmModel?.id != selectedLlmModel.id) {
+            Log.w(
+                TAG,
+                "Selected LLM model ${selectedLlmModel.displayName} is not ready; " +
+                    "using ready fallback ${readyLlmModel?.displayName}"
+            )
+        }
+
+        Log.i(
+            TAG,
+            "Pending transcriptions: ${pendingTranscriptions.size}, pending summaries: ${pendingSummaries.size}"
+        )
+        if (needsWhisper) {
+            logBackendResolution("STT", sttResolution)
+        }
+        if (needsLlama) {
+            logBackendResolution("LLM", llmResolution)
+        }
+        if (!needsWhisper && !needsLlama) {
             Log.i(TAG, "No pending recordings")
             return Result.success()
         }
 
-        val activeIds = mutableSetOf<Long>()
-        val transcribedRecordings = mutableListOf<Recording>()
-        val processedDates = linkedSetOf<String>()
+        val summaryCandidates = mutableListOf<Recording>()
+        val transcriptionEngine: TranscriptionEngine = WhisperTranscriptionEngine()
 
-        setForeground(createForegroundInfo("Loading Whisper model"))
-        Log.i(TAG, "Initializing Whisper")
-        val whisperModelPath = ModelUtils.getWhisperModelPath(ctx)
-        val whisperVocabPath = ModelUtils.getWhisperVocabPath(ctx)
-        val whisperReady = WhisperRuntime.warmUp(whisperModelPath, whisperVocabPath)
-        if (!whisperReady) {
-            Log.e(TAG, "Failed to initialize Whisper")
-            return Result.retry()
-        }
-        Log.i(TAG, "Whisper initialized")
-
-        for ((index, recording) in pending.withIndex()) {
-            activeIds += recording.id
-            db.recordingDao().updateStatus(recording.id, STATUS_TRANSCRIBING)
-            setForeground(
-                createForegroundInfo(
-                    message = "Transcribing ${index + 1}/${pending.size}",
-                    current = index + 1,
-                    total = pending.size
-                )
+        if (needsWhisper) {
+            setForeground(createForegroundInfo("Loading Whisper model"))
+            Log.i(TAG, "Initializing Whisper")
+            val whisperModelPath = InferencePreferences.getSelectedSttModelPath(ctx)
+            val whisperVocabPath = ModelUtils.getWhisperVocabPath(ctx)
+            val warmUpResult = transcriptionEngine.warmUp(
+                whisperModelPath,
+                whisperVocabPath,
+                sttResolution,
             )
-            Log.i(TAG, "Transcribing recording ${recording.id}")
+            logWhisperWarmUpMetrics(warmUpResult.metrics)
+            if (!warmUpResult.success) {
+                Log.e(TAG, "Failed to initialize Whisper")
+                return Result.retry()
+            }
+            Log.i(TAG, "Whisper initialized")
 
-            try {
-                val audioFloats = loadWavAsFloat(recording.filePath)
-                if (audioFloats == null) {
-                    Log.e(TAG, "Failed to load WAV: ${recording.filePath}")
-                    db.recordingDao().updateStatus(recording.id, STATUS_FAILED)
-                    activeIds -= recording.id
-                    continue
-                }
-
-                val text = WhisperRuntime.transcribe(
-                    whisperModelPath,
-                    whisperVocabPath,
-                    audioFloats,
-                    WHISPER_TRANSCRIBE_TIMEOUT_MS
-                )
-                if (text.isBlank()) {
-                    Log.w(
-                        TAG,
-                        "Transcription timed out or returned empty text for recording ${recording.id}"
-                    )
-                    db.recordingDao().updateStatus(recording.id, STATUS_FAILED)
-                    activeIds -= recording.id
-                    continue
-                }
-                db.transcriptDao().insert(
-                    Transcript(
-                        recordingId = recording.id,
-                        text = text,
-                        createdAt = System.currentTimeMillis()
+            for ((index, recording) in pendingTranscriptions.withIndex()) {
+                db.recordingDao().updateStatus(recording.id, STATUS_TRANSCRIBING)
+                setForeground(
+                    createForegroundInfo(
+                        message = "Transcribing ${index + 1}/${pendingTranscriptions.size}",
+                        current = index + 1,
+                        total = pendingTranscriptions.size
                     )
                 )
-                db.recordingDao().updateStatus(recording.id, STATUS_SUMMARIZING)
-                transcribedRecordings += recording
-                processedDates += dateFmt.format(Date(recording.startedAt))
-            } catch (e: Exception) {
-                Log.e(TAG, "Transcription failed for recording ${recording.id}", e)
-                db.recordingDao().updateStatus(recording.id, STATUS_FAILED)
-                activeIds -= recording.id
+                Log.i(TAG, "Transcribing recording ${recording.id}")
+
+                try {
+                    val audioLoadStartedAt = SystemClock.elapsedRealtime()
+                    val audioFloats = loadWavAsFloat(recording.filePath)
+                    val audioLoadMs = SystemClock.elapsedRealtime() - audioLoadStartedAt
+                    if (audioFloats == null) {
+                        Log.e(TAG, "Failed to load WAV: ${recording.filePath}")
+                        db.recordingDao().updateStatus(recording.id, STATUS_FAILED)
+                        continue
+                    }
+
+                    val transcription = transcriptionEngine.transcribe(
+                        whisperModelPath,
+                        whisperVocabPath,
+                        audioFloats,
+                        WHISPER_TRANSCRIBE_TIMEOUT_MS,
+                        sttResolution,
+                    )
+                    logTranscriptionMetrics(
+                        recording = recording,
+                        audioLoadMs = audioLoadMs,
+                        audioSampleCount = audioFloats.size,
+                        metrics = transcription.metrics,
+                    )
+                    if (transcription.text.isBlank()) {
+                        Log.w(
+                            TAG,
+                            "Transcription timed out or returned empty text for recording ${recording.id}"
+                        )
+                        db.recordingDao().updateStatus(recording.id, STATUS_FAILED)
+                        continue
+                    }
+
+                    db.transcriptDao().insert(
+                        Transcript(
+                            recordingId = recording.id,
+                            text = transcription.text,
+                            createdAt = System.currentTimeMillis()
+                        )
+                    )
+
+                    if (canRunSummary) {
+                        db.recordingDao().updateStatus(recording.id, STATUS_SUMMARIZING)
+                        summaryCandidates += recording
+                    } else {
+                        db.recordingDao().updateStatus(recording.id, STATUS_TRANSCRIPT_READY)
+                    }
+                } catch (e: Exception) {
+                    Log.e(TAG, "Transcription failed for recording ${recording.id}", e)
+                    db.recordingDao().updateStatus(recording.id, STATUS_FAILED)
+                }
             }
         }
 
-        if (transcribedRecordings.isEmpty()) {
-            Log.i(TAG, "Nothing to summarize")
+        if (canRunSummary) {
+            summaryCandidates += pendingSummaries
+        }
+
+        if (summaryCandidates.isEmpty()) {
+            cleanupExpiredRecordings(ctx, db)
+            Log.i(TAG, "Processing complete without summary work")
             return Result.success()
         }
 
-        val llama = LlamaJNI()
+        val summaryActiveIds = mutableSetOf<Long>()
+        val processedDates = linkedSetOf<String>()
+        val existingSummaryIds = pendingSummaries.mapTo(mutableSetOf()) { it.id }
+        val llmModel = readyLlmModel ?: selectedLlmModel
+
         setForeground(createForegroundInfo("Loading summary model"))
-        Log.i(TAG, "Initializing LLaMA")
-        val llamaCtx = llama.init(ModelUtils.getLlamaModelPath(ctx))
-        if (llamaCtx == 0L) {
-            Log.e(TAG, "Failed to initialize LLaMA")
-            resetStatuses(db, activeIds, STATUS_PENDING)
+        Log.i(TAG, "Initializing summary engine")
+        val summaryEngineInitStartedAt = SystemClock.elapsedRealtime()
+        val summaryEngineHandle = SummaryEngineFactory.create(
+            context = ctx,
+            model = llmModel,
+            resolution = llmResolution,
+        )
+        val summaryEngineInitMs = SystemClock.elapsedRealtime() - summaryEngineInitStartedAt
+        Log.i(TAG, "Summary engine init took ${summaryEngineInitMs}ms")
+        if (summaryEngineHandle == null) {
+            Log.e(TAG, "Failed to initialize summary engine")
+            resetStatuses(db, summaryCandidates.map { it.id }.toSet(), STATUS_TRANSCRIPT_READY)
             return Result.retry()
         }
-        Log.i(TAG, "LLaMA initialized")
+        val summaryEngine = summaryEngineHandle.engine
+        if (!summaryEngineHandle.fallbackReason.isNullOrBlank()) {
+            Log.w(TAG, summaryEngineHandle.fallbackReason)
+        }
+        Log.i(
+            TAG,
+            "Summary engine initialized with model=${summaryEngineHandle.model.displayName}, " +
+                "backend=${summaryEngineHandle.effectiveBackend.displayName}"
+        )
 
         return try {
             try {
+                for ((index, recording) in summaryCandidates.withIndex()) {
+                    summaryActiveIds += recording.id
+                    if (existingSummaryIds.contains(recording.id)) {
+                        db.recordingDao().updateStatus(recording.id, STATUS_SUMMARIZING)
+                    }
+
+                    setForeground(
+                        createForegroundInfo(
+                            message = "Summarizing recording ${index + 1}/${summaryCandidates.size}",
+                            current = index + 1,
+                            total = summaryCandidates.size
+                        )
+                    )
+
+                    val transcript = db.transcriptDao().getByRecordingId(recording.id)
+                    val transcriptText = transcript?.text?.trim().orEmpty()
+                    if (transcriptText.isBlank()) {
+                        Log.w(TAG, "Missing transcript for recording ${recording.id}")
+                        db.recordingDao().updateStatus(recording.id, STATUS_FAILED)
+                        summaryActiveIds -= recording.id
+                        continue
+                    }
+
+                    val summaryPrompt = SummaryPromptBuilder.recordingPrompt(transcriptText)
+                    val summaryResult = summaryEngine.generate(
+                        summaryPrompt,
+                        SummaryEngineFactory.RECORDING_MAX_TOKENS,
+                    )
+                    logSummaryMetrics(
+                        scope = "recording:${recording.id}",
+                        promptLength = summaryPrompt.length,
+                        metrics = summaryResult.metrics,
+                    )
+                    val summary = SummaryTextFormatter.normalize(summaryResult.text)
+                    db.recordingDao().updateSummaryText(recording.id, summary)
+                    processedDates += dateFmt.format(Date(recording.startedAt))
+                }
+
                 for ((index, date) in processedDates.withIndex()) {
                     setForeground(
                         createForegroundInfo(
@@ -155,16 +293,27 @@ class ProcessingWorker(
                     )
                     Log.i(TAG, "Summarizing date $date")
 
+                    val recordingsForDate = db.recordingDao().getRecordingsByDate(date)
+                    val recordingSummaries = recordingsForDate.mapNotNull { it.summaryText }
                     val transcripts = db.transcriptDao().getTranscriptsByDate(date)
                     if (transcripts.isEmpty()) {
                         continue
                     }
 
-                    val combined = transcripts.joinToString("\n\n") { it.text.trim() }
-                    val prompt = "Summarize the following daily transcript in concise Korean:\n\n$combined"
-                    val summary = SummaryTextFormatter.normalize(
-                        llama.generate(llamaCtx, prompt)
+                    val prompt = SummaryPromptBuilder.dailyPrompt(
+                        recordingSummaries = recordingSummaries,
+                        fallbackTranscripts = transcripts.map { it.text },
                     )
+                    val summaryResult = summaryEngine.generate(
+                        prompt,
+                        SummaryEngineFactory.DAILY_MAX_TOKENS,
+                    )
+                    logSummaryMetrics(
+                        scope = "daily:$date",
+                        promptLength = prompt.length,
+                        metrics = summaryResult.metrics,
+                    )
+                    val summary = SummaryTextFormatter.normalize(summaryResult.text)
 
                     db.summaryDao().insertOrReplace(
                         Summary(
@@ -175,13 +324,15 @@ class ProcessingWorker(
                     )
                 }
 
-                for (recording in transcribedRecordings) {
-                    db.recordingDao().updateStatus(recording.id, STATUS_DONE)
-                    activeIds -= recording.id
+                for (recording in summaryCandidates) {
+                    if (summaryActiveIds.contains(recording.id)) {
+                        db.recordingDao().updateStatus(recording.id, STATUS_DONE)
+                        summaryActiveIds -= recording.id
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "Summarization failed", e)
-                resetStatuses(db, activeIds, STATUS_PENDING)
+                resetStatuses(db, summaryActiveIds, STATUS_TRANSCRIPT_READY)
                 return Result.retry()
             }
 
@@ -189,7 +340,7 @@ class ProcessingWorker(
             Log.i(TAG, "Processing complete")
             Result.success()
         } finally {
-            llama.free(llamaCtx)
+            summaryEngine.close()
         }
     }
 
@@ -234,6 +385,74 @@ class ProcessingWorker(
             }
         }
         db.recordingDao().deleteExpiredRecordings(cutoffMs)
+    }
+
+    private fun logWhisperWarmUpMetrics(metrics: EngineWarmUpMetrics) {
+        Log.i(
+            TAG,
+            "Whisper warm-up: total=${metrics.totalMs}ms, modelLoad=${metrics.modelLoadMs}ms, " +
+                "auxLoad=${metrics.auxiliaryLoadMs}ms, delegateInit=${metrics.delegateInitMs}ms, " +
+                "requested=${metrics.requestedBackend.displayName}, " +
+                "effective=${metrics.effectiveBackend.displayName}, reused=${metrics.reused}, " +
+                "fallback=${metrics.fallbackReason ?: "none"}"
+        )
+    }
+
+    private fun logTranscriptionMetrics(
+        recording: Recording,
+        audioLoadMs: Long,
+        audioSampleCount: Int,
+        metrics: TranscriptionMetrics,
+    ) {
+        Log.i(
+            TAG,
+            "Transcription metrics recording=${recording.id}: audioLoad=${audioLoadMs}ms, " +
+                "samples=$audioSampleCount, preprocess=${metrics.preprocessingMs}ms, " +
+                "infer=${metrics.inferenceMs}ms, decode=${metrics.decodeMs}ms, " +
+                "total=${metrics.totalMs}ms, timedOut=${metrics.timedOut}, " +
+                "requested=${metrics.requestedBackend.displayName}, " +
+                "effective=${metrics.effectiveBackend.displayName}, " +
+                "delegateInit=${metrics.delegateInitMs}ms, fallback=${metrics.fallbackReason ?: "none"}"
+        )
+    }
+
+    private fun logSummaryMetrics(
+        scope: String,
+        promptLength: Int,
+        metrics: SummaryMetrics,
+    ) {
+        Log.i(
+            TAG,
+            "Summary metrics $scope: promptChars=$promptLength, promptTokens=${metrics.promptTokenCount}, " +
+                "generatedTokens=${metrics.generatedTokenCount}, ttft=${formatMs(metrics.timeToFirstTokenMs)}, " +
+                "prefill=${formatMs(metrics.promptEvalMs)}, decode=${formatMs(metrics.decodeMs)}, " +
+                "sampling=${formatMs(metrics.samplingMs)}, total=${metrics.totalMs}ms, " +
+                "prefillTps=${formatRate(metrics.promptTokensPerSecond)}, " +
+                "decodeTps=${formatRate(metrics.decodeTokensPerSecond)}"
+        )
+    }
+
+    private fun logBackendResolution(label: String, resolution: BackendResolution) {
+        val fallbackPart = if (resolution.fallbackReason.isNullOrBlank()) {
+            ""
+        } else {
+            ", fallbackReason=${resolution.fallbackReason}"
+        }
+        Log.i(
+            TAG,
+            "$label backend requested=${resolution.requestedBackend.displayName}, " +
+                "effective=${resolution.effectiveBackend.displayName}$fallbackPart"
+        )
+    }
+
+    private fun formatMs(value: Double): String = String.format(Locale.US, "%.2fms", value)
+
+    private fun formatRate(value: Double?): String {
+        return if (value == null) {
+            "n/a"
+        } else {
+            String.format(Locale.US, "%.2f", value)
+        }
     }
 
     internal fun loadWavAsFloat(filePath: String): FloatArray? {

@@ -9,7 +9,10 @@ import com.voicelog.db.entity.Summary
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.After
-import org.junit.Assert.*
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNotNull
+import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -34,19 +37,23 @@ class SummaryDaoTest {
 
     @Test
     fun insertOrReplace_insertsNew() = runBlocking {
-        dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "첫 요약", createdAt = 1000L))
-        val s = dao.getByDate("2026-04-24")
-        assertNotNull(s)
-        assertEquals("첫 요약", s!!.summaryText)
+        dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "first summary", createdAt = 1000L))
+
+        val summary = dao.getByDate("2026-04-24")
+
+        assertNotNull(summary)
+        assertEquals("first summary", summary!!.summaryText)
     }
 
     @Test
     fun insertOrReplace_replacesSameDate() = runBlocking {
-        dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "이전 요약", createdAt = 1000L))
-        dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "새 요약", createdAt = 2000L))
+        dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "old summary", createdAt = 1000L))
+        dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "new summary", createdAt = 2000L))
+
         val all = dao.getAllSummaries().first()
+
         assertEquals(1, all.size)
-        assertEquals("새 요약", all[0].summaryText)
+        assertEquals("new summary", all[0].summaryText)
     }
 
     @Test
@@ -59,7 +66,9 @@ class SummaryDaoTest {
         dao.insertOrReplace(Summary(date = "2026-04-22", summaryText = "A", createdAt = 1000L))
         dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "C", createdAt = 3000L))
         dao.insertOrReplace(Summary(date = "2026-04-23", summaryText = "B", createdAt = 2000L))
+
         val all = dao.getAllSummaries().first()
+
         assertEquals(3, all.size)
         assertEquals("2026-04-24", all[0].date)
         assertEquals("2026-04-23", all[1].date)
@@ -68,9 +77,11 @@ class SummaryDaoTest {
 
     @Test
     fun deleteByDate_removesCorrectEntry() = runBlocking {
-        dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "삭제대상", createdAt = 1000L))
-        dao.insertOrReplace(Summary(date = "2026-04-23", summaryText = "유지", createdAt = 2000L))
+        dao.insertOrReplace(Summary(date = "2026-04-24", summaryText = "delete me", createdAt = 1000L))
+        dao.insertOrReplace(Summary(date = "2026-04-23", summaryText = "keep me", createdAt = 2000L))
+
         dao.deleteByDate("2026-04-24")
+
         assertNull(dao.getByDate("2026-04-24"))
         assertNotNull(dao.getByDate("2026-04-23"))
     }
