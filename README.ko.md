@@ -14,6 +14,7 @@ VoiceLog는 온디바이스 Android 음성 기록 앱입니다. 음성을 녹음
 - Whisper TFLite 모델 기반 로컬 STT.
 - LiteRT-LM 또는 llama.cpp GGUF 모델 기반 로컬 요약.
 - 모델 선택, backend 선택, 다운로드, 삭제, 런타임 상태를 확인할 수 있는 상세 설정 화면.
+- 시스템 기본값, 영어, 한국어를 선택할 수 있는 앱 언어 설정.
 - 요청 backend와 실제 적용 backend, fallback 사유 표시.
 - STT와 LLM 작업을 위한 배터리 친화 실행 정책.
 - 녹음, 모델 다운로드, 처리 진행 상황을 위한 foreground 알림.
@@ -94,6 +95,7 @@ VoiceLog는 시작 시 필요한 런타임 권한을 한 번에 요청합니다.
 
 설정 화면에서 다음 항목을 관리할 수 있습니다.
 
+- 앱 언어 선택.
 - STT backend: `Auto`, `CPU`, `GPU`, `NPU`.
 - LLM backend: `Auto`, `CPU`, `GPU`.
 - STT 모델 선택.

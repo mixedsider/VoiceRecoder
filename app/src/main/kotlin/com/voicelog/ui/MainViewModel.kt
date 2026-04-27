@@ -8,6 +8,7 @@ import com.voicelog.ui.adapter.RecordingUiItem
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
+import java.text.DateFormat
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -15,8 +16,7 @@ import java.util.Locale
 class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val db = AppDatabase.getInstance(application)
-    private val dateFmt = SimpleDateFormat("yyyy년 M월 d일 (E)", Locale.KOREA)
-    private val dateKeyFmt = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+    private val dateKeyFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
     val uiItems = combine(
         db.recordingDao().getAllRecordings(),
@@ -25,6 +25,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val summaryByDate = summaries.associateBy { it.date }
         val grouped = recordings.groupBy { dateKeyFmt.format(Date(it.startedAt)) }
         val result = mutableListOf<RecordingUiItem>()
+        val dateFmt = DateFormat.getDateInstance(DateFormat.FULL, Locale.getDefault())
 
         for ((dateKey, recs) in grouped) {
             val label = dateFmt.format(Date(recs.first().startedAt))

@@ -6,6 +6,7 @@ import android.view.ViewGroup
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.voicelog.R
 import com.voicelog.databinding.ItemDateHeaderBinding
 import com.voicelog.databinding.ItemRecordingBinding
 import com.voicelog.databinding.ItemSummaryBinding
@@ -23,7 +24,6 @@ class RecordingAdapter(
         private const val TYPE_HEADER = 0
         private const val TYPE_ITEM = 1
         private const val TYPE_SUMMARY = 2
-        private val timeFmt = SimpleDateFormat("HH:mm", Locale.KOREA)
     }
 
     override fun getItemViewType(position: Int): Int = when (getItem(position)) {
@@ -79,13 +79,15 @@ class RecordingAdapter(
     ) :
         RecyclerView.ViewHolder(binding.root) {
         fun bind(item: RecordingUiItem.RecordingItem) {
+            val context = binding.root.context
             val rec = item.recording
+            val timeFmt = SimpleDateFormat("HH:mm", Locale.getDefault())
             val start = timeFmt.format(Date(rec.startedAt))
             val end = timeFmt.format(Date(rec.startedAt + rec.durationSec * 1000L))
             val durationText = if (rec.durationSec < 60) {
-                "${rec.durationSec}s"
+                context.getString(R.string.duration_seconds, rec.durationSec)
             } else {
-                "${rec.durationSec / 60}m"
+                context.getString(R.string.duration_minutes, rec.durationSec / 60)
             }
             binding.tvTimeRange.text = "$start ~ $end  [$durationText]"
 
@@ -94,52 +96,52 @@ class RecordingAdapter(
                     binding.tvSummary.text = item.transcript.text
                     binding.tvStatus.visibility = View.VISIBLE
                     binding.tvStatus.text = when (rec.status) {
-                        "transcript_ready" -> "STT 완료, 요약 대기중"
-                        "pending", "queued" -> "처리 대기중"
-                        "summarizing" -> "STT 완료, 요약 생성중"
-                        "done" -> "STT 완료"
-                        else -> "STT 완료"
+                        "transcript_ready" -> context.getString(R.string.status_stt_complete_summary_waiting)
+                        "pending", "queued" -> context.getString(R.string.status_processing_waiting)
+                        "summarizing" -> context.getString(R.string.status_stt_complete_summary_generating)
+                        "done" -> context.getString(R.string.status_stt_complete)
+                        else -> context.getString(R.string.status_stt_complete)
                     }
                 }
 
                 rec.status == "pending" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "STT 대기중"
+                    binding.tvStatus.text = context.getString(R.string.status_stt_waiting)
                 }
 
                 rec.status == "queued" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "STT 처리 대기중"
+                    binding.tvStatus.text = context.getString(R.string.status_stt_processing_waiting)
                 }
 
                 rec.status == "transcribing" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "STT 처리중"
+                    binding.tvStatus.text = context.getString(R.string.status_stt_processing)
                 }
 
                 rec.status == "transcript_ready" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "요약 대기중"
+                    binding.tvStatus.text = context.getString(R.string.status_summary_waiting)
                 }
 
                 rec.status == "summarizing" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "요약 생성중"
+                    binding.tvStatus.text = context.getString(R.string.status_summary_generating)
                 }
 
                 rec.status == "failed" -> {
                     binding.tvSummary.text = ""
                     binding.tvStatus.visibility = View.VISIBLE
-                    binding.tvStatus.text = "처리 실패"
+                    binding.tvStatus.text = context.getString(R.string.status_failed)
                 }
 
                 else -> {
-                    binding.tvSummary.text = "(No content)"
+                    binding.tvSummary.text = context.getString(R.string.status_no_content)
                     binding.tvStatus.visibility = View.GONE
                 }
             }

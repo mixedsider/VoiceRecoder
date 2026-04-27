@@ -44,7 +44,7 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
     private lateinit var binding: ActivityRecordingDetailBinding
 
     private val handler = Handler(Looper.getMainLooper())
-    private val displayDateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.KOREA)
+    private val displayDateTimeFormat = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.getDefault())
 
     private var mediaPlayer: MediaPlayer? = null
     private var tts: TextToSpeech? = null
@@ -112,7 +112,7 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
         }
 
         val textToSpeech = tts ?: return
-        val languageResult = textToSpeech.setLanguage(Locale.KOREA)
+        val languageResult = textToSpeech.setLanguage(Locale.getDefault())
         isTtsReady = languageResult != TextToSpeech.LANG_MISSING_DATA &&
             languageResult != TextToSpeech.LANG_NOT_SUPPORTED
 
@@ -389,13 +389,13 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
 
     private fun displayStatusLabel(status: String): String {
         return when (status) {
-            "pending" -> "STT 대기중"
-            "queued" -> "처리 대기중"
-            "transcribing" -> "STT 처리중"
-            "transcript_ready" -> "요약 대기중"
-            "summarizing" -> "요약 생성중"
-            "failed" -> "처리 실패"
-            "done" -> "완료"
+            "pending" -> getString(R.string.status_pending)
+            "queued" -> getString(R.string.status_queued)
+            "transcribing" -> getString(R.string.status_transcribing)
+            "transcript_ready" -> getString(R.string.status_transcript_ready)
+            "summarizing" -> getString(R.string.status_summarizing)
+            "failed" -> getString(R.string.status_failed)
+            "done" -> getString(R.string.status_done)
             else -> status
         }
     }
@@ -406,26 +406,6 @@ class RecordingDetailActivity : AppCompatActivity(), TextToSpeech.OnInitListener
             "transcribing", "transcript_ready", "summarizing", "queued", "pending" -> {
                 getString(R.string.summary_pending)
             }
-            else -> getString(R.string.summary_pending)
-        }
-    }
-
-    private fun statusLabel(status: String): String {
-        return when (status) {
-            "pending" -> "충전 대기중"
-            "queued" -> "처리 대기중"
-            "transcribing" -> "텍스트 변환중"
-            "summarizing" -> "요약 생성중"
-            "failed" -> "처리 실패"
-            "done" -> "완료"
-            else -> status
-        }
-    }
-
-    private fun missingSummaryText(status: String): String {
-        return when (status) {
-            "failed" -> getString(R.string.summary_failed)
-            "transcribing", "summarizing", "queued", "pending" -> getString(R.string.summary_pending)
             else -> getString(R.string.summary_pending)
         }
     }

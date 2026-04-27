@@ -3,6 +3,7 @@ package com.voicelog
 import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import com.voicelog.util.AppLanguagePreferences
 
 class VoiceLogApp : Application() {
 
@@ -16,34 +17,36 @@ class VoiceLogApp : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        AppLanguagePreferences.applyStoredLanguage(this)
         createNotificationChannels()
     }
 
     private fun createNotificationChannels() {
         val notificationManager = getSystemService(NotificationManager::class.java)
+        val localizedContext = AppLanguagePreferences.localizedContext(this)
 
         val recordingChannel = NotificationChannel(
             NOTIFICATION_CHANNEL_ID,
-            "VoiceLog recording",
+            localizedContext.getString(R.string.notification_channel_recording_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Shows microphone recording status."
+            description = localizedContext.getString(R.string.notification_channel_recording_description)
         }
 
         val modelDownloadChannel = NotificationChannel(
             MODEL_DOWNLOAD_CHANNEL_ID,
-            "VoiceLog model download",
+            localizedContext.getString(R.string.notification_channel_model_download_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Shows first-run model download progress."
+            description = localizedContext.getString(R.string.notification_channel_model_download_description)
         }
 
         val processingChannel = NotificationChannel(
             PROCESSING_CHANNEL_ID,
-            "VoiceLog processing",
+            localizedContext.getString(R.string.notification_channel_processing_name),
             NotificationManager.IMPORTANCE_LOW,
         ).apply {
-            description = "Shows background transcription and summarization progress."
+            description = localizedContext.getString(R.string.notification_channel_processing_description)
         }
 
         notificationManager.createNotificationChannel(recordingChannel)

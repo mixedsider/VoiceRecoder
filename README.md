@@ -14,6 +14,7 @@ The current build focuses on private local inference, configurable acceleration,
 - Local STT with Whisper TFLite models.
 - Local summary generation with LiteRT-LM or llama.cpp GGUF models.
 - Detailed settings for model selection, backend selection, download, delete, and runtime status.
+- App language selection for system default, English, and Korean.
 - Runtime backend fallback reporting.
 - Battery-aware processing policies for STT and LLM work.
 - Foreground notifications for recording, model downloads, and processing.
@@ -94,6 +95,7 @@ Manifest-only permissions are also used for foreground services, network downloa
 
 Settings exposes:
 
+- App language selection.
 - STT backend: `Auto`, `CPU`, `GPU`, `NPU`.
 - LLM backend: `Auto`, `CPU`, `GPU`.
 - STT model selection.

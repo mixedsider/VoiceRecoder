@@ -52,7 +52,7 @@ class MainActivity : AppCompatActivity() {
     private var currentDownloadWorkState: WorkInfo.State? = null
     private var lastProcessingWorkState: WorkInfo.State? = null
     private var permissionRequestInFlight = false
-    private val processingDateKeyFmt = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+    private val processingDateKeyFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -115,13 +115,13 @@ class MainActivity : AppCompatActivity() {
                     WorkInfo.State.ENQUEUED,
                     WorkInfo.State.BLOCKED -> {
                         if (!isDownloadActive()) {
-                            binding.toolbar.subtitle = "Waiting to process recordings..."
+                            binding.toolbar.subtitle = getString(R.string.status_waiting_process_recordings)
                         }
                     }
 
                     WorkInfo.State.RUNNING -> {
                         if (!isDownloadActive()) {
-                            binding.toolbar.subtitle = "Processing recordings..."
+                            binding.toolbar.subtitle = getString(R.string.status_processing_recordings)
                         }
                     }
 
@@ -186,7 +186,7 @@ class MainActivity : AppCompatActivity() {
                         binding.toolbar.subtitle = null
                         updateModelAvailabilityUi()
                         if (lastDownloadWorkState != WorkInfo.State.SUCCEEDED) {
-                            Toast.makeText(this, "Model download complete.", Toast.LENGTH_SHORT).show()
+                            Toast.makeText(this, R.string.toast_model_download_complete, Toast.LENGTH_SHORT).show()
                         }
                     }
 
@@ -269,12 +269,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun renderDownloadState(info: WorkInfo) {
-        val modelName = info.progress.getString(ModelDownloadWorker.CURRENT_MODEL_NAME) ?: "Model"
+        val modelName = info.progress.getString(ModelDownloadWorker.CURRENT_MODEL_NAME)
+            ?: getString(R.string.model_label)
         val percent = info.progress.getInt(ModelDownloadWorker.PROGRESS_PERCENT, -1)
         binding.toolbar.subtitle = if (percent in 0..100) {
-            "$modelName downloading... $percent%"
+            getString(R.string.model_download_progress, modelName, percent)
         } else {
-            "$modelName preparing download..."
+            getString(R.string.model_download_preparing_named, modelName)
         }
         binding.fabRecord.isEnabled = false
     }
@@ -283,7 +284,7 @@ class MainActivity : AppCompatActivity() {
         val ready = InferencePreferences.areSelectedModelsReady(this)
         binding.fabRecord.isEnabled = ready
         if (!ready && binding.toolbar.subtitle.isNullOrBlank()) {
-            binding.toolbar.subtitle = "Model download required."
+            binding.toolbar.subtitle = getString(R.string.toolbar_model_download_required)
         } else if (ready) {
             binding.toolbar.subtitle = null
         }
@@ -303,9 +304,9 @@ class MainActivity : AppCompatActivity() {
         ) {
             if (force) {
                 AlertDialog.Builder(this)
-                    .setTitle("Model download in progress")
-                    .setMessage("The app is downloading required models. Recording will be available after it finishes.")
-                    .setPositiveButton("OK", null)
+                    .setTitle(R.string.title_model_download_in_progress)
+                    .setMessage(R.string.message_model_download_in_progress)
+                    .setPositiveButton(R.string.action_ok, null)
                     .show()
             }
             return
@@ -315,34 +316,31 @@ class MainActivity : AppCompatActivity() {
             .joinToString(separator = "\n") { "- ${it.displayName}" }
 
         modelDownloadDialog = AlertDialog.Builder(this)
-            .setTitle("Model download required")
-            .setMessage(
-                "The app needs these models before first use:\n\n$missingNames\n\n" +
-                    "They are large files, so Wi-Fi is recommended."
-            )
-            .setPositiveButton("Download") { _, _ ->
+            .setTitle(R.string.title_model_download_required)
+            .setMessage(getString(R.string.message_model_download_required, missingNames))
+            .setPositiveButton(R.string.action_download) { _, _ ->
                 enqueueModelDownload()
             }
-            .setNegativeButton("Later", null)
+            .setNegativeButton(R.string.action_later, null)
             .show()
     }
 
     private fun showDownloadFailedDialog(reason: String? = null) {
         AlertDialog.Builder(this)
-            .setTitle("Model download failed")
+            .setTitle(R.string.title_model_download_failed)
             .setMessage(
                 buildString {
-                    append("Please check your network connection and try again.")
+                    append(getString(R.string.message_model_download_failed))
                     if (!reason.isNullOrBlank()) {
-                        append("\n\nError: ")
-                        append(reason)
+                        append("\n\n")
+                        append(getString(R.string.error_line, reason))
                     }
                 }
             )
-            .setPositiveButton("Retry") { _, _ ->
+            .setPositiveButton(R.string.action_retry) { _, _ ->
                 enqueueModelDownload()
             }
-            .setNegativeButton("Close", null)
+            .setNegativeButton(R.string.action_close, null)
             .show()
     }
 
@@ -352,9 +350,9 @@ class MainActivity : AppCompatActivity() {
 
     private fun showSummaryDetail(item: RecordingUiItem.SummaryItem) {
         AlertDialog.Builder(this)
-            .setTitle("Daily Summary")
+            .setTitle(R.string.daily_summary_title)
             .setMessage(SummaryTextFormatter.normalize(item.summary.summaryText))
-            .setPositiveButton("OK", null)
+            .setPositiveButton(R.string.action_ok, null)
             .show()
     }
 
@@ -421,28 +419,25 @@ class MainActivity : AppCompatActivity() {
         when {
             microphoneDenied && notificationDenied -> {
                 AlertDialog.Builder(this)
-                    .setTitle("Permissions needed")
-                    .setMessage(
-                        "VoiceLog needs microphone permission to record voice. " +
-                            "Notification permission is recommended so you can see background recording, download, and processing progress."
-                    )
-                    .setPositiveButton("OK", null)
+                    .setTitle(R.string.title_permissions_needed)
+                    .setMessage(R.string.message_permissions_needed)
+                    .setPositiveButton(R.string.action_ok, null)
                     .show()
             }
 
             microphoneDenied -> {
                 AlertDialog.Builder(this)
-                    .setTitle("Microphone permission required")
-                    .setMessage("Voice recording needs microphone permission. Please allow it in system settings.")
-                    .setPositiveButton("OK", null)
+                    .setTitle(R.string.title_microphone_permission_required)
+                    .setMessage(R.string.message_microphone_permission_required)
+                    .setPositiveButton(R.string.action_ok, null)
                     .show()
             }
 
             notificationDenied -> {
                 AlertDialog.Builder(this)
-                    .setTitle("Notification permission recommended")
-                    .setMessage("Background processing progress uses notifications. Allow notifications to see transcription progress.")
-                    .setPositiveButton("OK", null)
+                    .setTitle(R.string.title_notification_permission_recommended)
+                    .setMessage(R.string.message_notification_permission_recommended)
+                    .setPositiveButton(R.string.action_ok, null)
                     .show()
             }
         }

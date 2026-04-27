@@ -16,8 +16,10 @@ import androidx.work.OneTimeWorkRequest
 import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.WorkerParameters
 import androidx.work.workDataOf
+import com.voicelog.R
 import com.voicelog.VoiceLogApp
 import com.voicelog.ui.MainActivity
+import com.voicelog.util.AppLanguagePreferences
 import com.voicelog.util.InferencePipeline
 import com.voicelog.util.InferencePreferences
 import com.voicelog.util.ModelSpec
@@ -58,7 +60,8 @@ class ModelDownloadWorker(
     }
 
     override suspend fun doWork(): Result {
-        setForeground(createForegroundInfo("Preparing downloads", -1))
+        val localizedContext = AppLanguagePreferences.localizedContext(applicationContext)
+        setForeground(createForegroundInfo(localizedContext.getString(R.string.model_label), -1))
 
         return try {
             val requestedModelIds = inputData.getStringArray(INPUT_MODEL_IDS)
@@ -82,7 +85,7 @@ class ModelDownloadWorker(
         } catch (e: Exception) {
             Result.failure(
                 Data.Builder()
-                    .putString(ERROR_MESSAGE, e.message ?: "Unknown download error")
+                    .putString(ERROR_MESSAGE, e.message ?: localizedContext.getString(R.string.title_model_download_failed))
                     .build()
             )
         }
@@ -169,10 +172,15 @@ class ModelDownloadWorker(
     }
 
     private fun createForegroundInfo(modelName: String, percent: Int): ForegroundInfo {
+        val localizedContext = AppLanguagePreferences.localizedContext(applicationContext)
         val contentText = when {
-            percent in 0..99 -> "$modelName downloading... $percent%"
-            percent >= 100 -> "$modelName download complete"
-            else -> "$modelName preparing download..."
+            percent in 0..99 -> localizedContext.getString(
+                R.string.model_download_progress,
+                modelName,
+                percent,
+            )
+            percent >= 100 -> localizedContext.getString(R.string.model_download_complete, modelName)
+            else -> localizedContext.getString(R.string.model_download_preparing)
         }
 
         val intent = Intent(applicationContext, MainActivity::class.java)
@@ -187,7 +195,7 @@ class ModelDownloadWorker(
             applicationContext,
             VoiceLogApp.MODEL_DOWNLOAD_CHANNEL_ID,
         )
-            .setContentTitle("VoiceLog model download")
+            .setContentTitle(localizedContext.getString(R.string.notification_model_download_title))
             .setContentText(contentText)
             .setSmallIcon(android.R.drawable.stat_sys_download)
             .setContentIntent(pendingIntent)

@@ -15,7 +15,7 @@
             android:layout_width="match_parent"
             android:layout_height="?attr/actionBarSize"
             app:navigationIcon="@drawable/ic_arrow_back"
-            app:title="Settings" />
+            app:title="@string/settings_title" />
     </com.google.android.material.appbar.AppBarLayout>
 
     <ScrollView
@@ -32,7 +32,25 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="Recording retention"
+                android:text="@string/app_language_title"
+                android:textSize="16sp"
+                android:textStyle="bold" />
+
+            <Spinner
+                android:id="@+id/spinnerAppLanguage"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content" />
+
+            <com.google.android.material.divider.MaterialDivider
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginVertical="20dp" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginBottom="8dp"
+                android:text="@string/recording_retention"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -46,27 +64,27 @@
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:tag="7"
-                    android:text="7 days" />
+                    android:text="@string/retention_7_days" />
 
                 <RadioButton
                     android:id="@+id/radio30"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:tag="30"
-                    android:text="30 days" />
+                    android:text="@string/retention_30_days" />
 
                 <RadioButton
                     android:id="@+id/radio90"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
                     android:tag="90"
-                    android:text="90 days" />
+                    android:text="@string/retention_90_days" />
 
                 <RadioButton
                     android:id="@+id/radioCustom"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Custom" />
+                    android:text="@string/retention_custom" />
             </RadioGroup>
 
             <com.google.android.material.textfield.TextInputLayout
@@ -74,7 +92,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:hint="Retention days"
+                android:hint="@string/retention_days"
                 android:visibility="gone">
 
                 <com.google.android.material.textfield.TextInputEditText
@@ -93,7 +111,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="STT execution policy"
+                android:text="@string/stt_execution_policy"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -106,25 +124,25 @@
                     android:id="@+id/radioSttImmediate"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Immediate" />
+                    android:text="@string/policy_immediate" />
 
                 <RadioButton
                     android:id="@+id/radioSttBatteryAware"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Battery aware" />
+                    android:text="@string/policy_battery_aware" />
 
                 <RadioButton
                     android:id="@+id/radioSttChargingOnly"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Charging only" />
+                    android:text="@string/policy_charging_only" />
 
                 <RadioButton
                     android:id="@+id/radioSttManual"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Manual only" />
+                    android:text="@string/policy_manual_only" />
             </RadioGroup>
 
             <com.google.android.material.divider.MaterialDivider
@@ -136,7 +154,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="LLM summary execution policy"
+                android:text="@string/llm_summary_execution_policy"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -149,25 +167,25 @@
                     android:id="@+id/radioSummaryImmediate"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Immediate" />
+                    android:text="@string/policy_immediate" />
 
                 <RadioButton
                     android:id="@+id/radioSummaryBatteryAware"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Battery aware" />
+                    android:text="@string/policy_battery_aware" />
 
                 <RadioButton
                     android:id="@+id/radioSummaryChargingOnly"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Charging only" />
+                    android:text="@string/policy_charging_only" />
 
                 <RadioButton
                     android:id="@+id/radioSummaryManual"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Manual only" />
+                    android:text="@string/policy_manual_only" />
             </RadioGroup>
 
             <com.google.android.material.divider.MaterialDivider
@@ -179,7 +197,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="Inference settings"
+                android:text="@string/inference_settings"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 
@@ -194,7 +212,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="4dp"
-                android:text="STT backend"
+                android:text="@string/stt_backend"
                 android:textStyle="bold" />
 
             <RadioGroup
@@ -206,25 +224,25 @@
                     android:id="@+id/radioSttBackendAuto"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Auto" />
+                    android:text="@string/backend_auto" />
 
                 <RadioButton
                     android:id="@+id/radioSttBackendCpu"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="CPU" />
+                    android:text="@string/backend_cpu" />
 
                 <RadioButton
                     android:id="@+id/radioSttBackendGpu"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="GPU" />
+                    android:text="@string/backend_gpu" />
 
                 <RadioButton
                     android:id="@+id/radioSttBackendNpu"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="NPU / NNAPI" />
+                    android:text="@string/backend_npu_nnapi" />
             </RadioGroup>
 
             <TextView
@@ -232,7 +250,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="4dp"
-                android:text="STT model"
+                android:text="@string/stt_model"
                 android:textStyle="bold" />
 
             <Spinner
@@ -245,7 +263,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
                 android:layout_marginBottom="4dp"
-                android:text="LLM backend"
+                android:text="@string/llm_backend"
                 android:textStyle="bold" />
 
             <RadioGroup
@@ -257,19 +275,19 @@
                     android:id="@+id/radioLlmBackendAuto"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="Auto" />
+                    android:text="@string/backend_auto" />
 
                 <RadioButton
                     android:id="@+id/radioLlmBackendCpu"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="CPU" />
+                    android:text="@string/backend_cpu" />
 
                 <RadioButton
                     android:id="@+id/radioLlmBackendGpu"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="GPU" />
+                    android:text="@string/backend_gpu" />
             </RadioGroup>
 
             <TextView
@@ -277,7 +295,7 @@
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
                 android:layout_marginBottom="4dp"
-                android:text="LLM model"
+                android:text="@string/llm_model"
                 android:textStyle="bold" />
 
             <Spinner
@@ -296,7 +314,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Download / retry" />
+                    android:text="@string/download_retry" />
 
                 <Space
                     android:layout_width="12dp"
@@ -307,7 +325,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_weight="1"
-                    android:text="Refresh" />
+                    android:text="@string/refresh" />
             </LinearLayout>
 
             <Button
@@ -315,7 +333,7 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp"
-                android:text="Delete selected model files" />
+                android:text="@string/delete_selected_model_files" />
 
             <com.google.android.material.divider.MaterialDivider
                 android:layout_width="match_parent"
@@ -326,7 +344,7 @@
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginBottom="8dp"
-                android:text="Model and backend status"
+                android:text="@string/model_backend_status"
                 android:textSize="16sp"
                 android:textStyle="bold" />
 

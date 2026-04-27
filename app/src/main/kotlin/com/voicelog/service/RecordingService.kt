@@ -10,10 +10,12 @@ import android.media.MediaRecorder
 import android.os.IBinder
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import com.voicelog.R
 import com.voicelog.VoiceLogApp
 import com.voicelog.db.AppDatabase
 import com.voicelog.db.entity.Recording
 import com.voicelog.ui.MainActivity
+import com.voicelog.util.AppLanguagePreferences
 import com.voicelog.util.AudioUtils
 import com.voicelog.worker.ProcessingScheduler
 import kotlinx.coroutines.CoroutineScope
@@ -173,6 +175,7 @@ class RecordingService : Service() {
     }
 
     private fun buildNotification(): Notification {
+        val localizedContext = AppLanguagePreferences.localizedContext(this)
         val pendingIntent = PendingIntent.getActivity(
             this, 0,
             Intent(this, MainActivity::class.java),
@@ -180,7 +183,7 @@ class RecordingService : Service() {
         )
         return NotificationCompat.Builder(this, VoiceLogApp.NOTIFICATION_CHANNEL_ID)
             .setContentTitle("VoiceLog")
-            .setContentText("음성 감지 중...")
+            .setContentText(localizedContext.getString(R.string.notification_recording_content))
             .setSmallIcon(android.R.drawable.ic_btn_speak_now)
             .setContentIntent(pendingIntent)
             .build()

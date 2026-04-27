@@ -9,7 +9,10 @@ import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.work.ExistingWorkPolicy
 import androidx.work.WorkManager
+import com.voicelog.R
 import com.voicelog.databinding.ActivitySettingsBinding
+import com.voicelog.util.AppLanguageOption
+import com.voicelog.util.AppLanguagePreferences
 import com.voicelog.util.InferenceBackend
 import com.voicelog.util.InferencePipeline
 import com.voicelog.util.InferencePreferences
@@ -32,14 +35,29 @@ class SettingsActivity : AppCompatActivity() {
         setSupportActionBar(binding.toolbar)
         binding.toolbar.setNavigationOnClickListener { finish() }
 
+        loadLanguageSetting()
         loadRetentionSetting()
         loadExecutionPolicies()
         loadInferenceSettings()
+        setupLanguageListener()
         setupRetentionListeners()
         setupExecutionPolicyListeners()
         setupInferenceListeners()
         setupModelActionButtons()
         renderModelStatus()
+    }
+
+    private fun loadLanguageSetting() {
+        val options = AppLanguagePreferences.supportedOptions.map { option ->
+            LanguageListItem(option, getString(option.displayNameRes))
+        }
+        val adapter = ArrayAdapter(this, android.R.layout.simple_spinner_item, options)
+        adapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        binding.spinnerAppLanguage.adapter = adapter
+
+        val selectedTag = AppLanguagePreferences.getLanguageTag(this)
+        val selectedIndex = options.indexOfFirst { it.option.tag == selectedTag }.coerceAtLeast(0)
+        binding.spinnerAppLanguage.setSelection(selectedIndex, false)
     }
 
     private fun loadRetentionSetting() {
@@ -119,6 +137,22 @@ class SettingsActivity : AppCompatActivity() {
         }
     }
 
+    private fun setupLanguageListener() {
+        binding.spinnerAppLanguage.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                val selected = parent?.getItemAtPosition(position) as? LanguageListItem ?: return
+                if (selected.option.tag == AppLanguagePreferences.getLanguageTag(this@SettingsActivity)) {
+                    return
+                }
+
+                AppLanguagePreferences.applyAndStoreLanguage(this@SettingsActivity, selected.option.tag)
+                Toast.makeText(this@SettingsActivity, R.string.toast_language_changed, Toast.LENGTH_SHORT).show()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        }
+    }
+
     private fun setupExecutionPolicyListeners() {
         binding.radioGroupSttPolicy.setOnCheckedChangeListener { _, checkedId ->
             val policy = when (checkedId) {
@@ -184,12 +218,12 @@ class SettingsActivity : AppCompatActivity() {
                 ExistingWorkPolicy.REPLACE,
                 request,
             )
-            Toast.makeText(this, "Started download for selected models.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_started_download_selected, Toast.LENGTH_SHORT).show()
         }
 
         binding.btnRefreshModelStatus.setOnClickListener {
             renderModelStatus()
-            Toast.makeText(this, "Model status refreshed.", Toast.LENGTH_SHORT).show()
+            Toast.makeText(this, R.string.toast_model_status_refreshed, Toast.LENGTH_SHORT).show()
         }
 
         binding.btnDeleteSelectedModels.setOnClickListener {
@@ -202,7 +236,11 @@ class SettingsActivity : AppCompatActivity() {
                 }
             }
             renderModelStatus()
-            Toast.makeText(this, "Deleted $deleted selected model file(s).", Toast.LENGTH_SHORT).show()
+            Toast.makeText(
+                this,
+                getString(R.string.toast_deleted_selected_model_files, deleted),
+                Toast.LENGTH_SHORT,
+            ).show()
         }
     }
 
@@ -223,74 +261,117 @@ class SettingsActivity : AppCompatActivity() {
         val llmReady = llmDownloadSpecs.all { ModelUtils.isModelReady(this, it) }
         val missingNames = InferencePreferences.getMissingModelSpecs(this)
             .joinToString(separator = "\n") { "- ${it.displayName}" }
-            .ifBlank { "None" }
+            .ifBlank { getString(R.string.none_label) }
 
-        binding.tvInferenceSummary.text =
-            "STT: requested ${sttResolution.requestedBackend.displayName}, " +
-                "effective ${sttResolution.effectiveBackend.displayName}, " +
-                "engine ${sttResolution.engineKind}\n" +
-                "LLM: requested ${llmResolution.requestedBackend.displayName}, " +
-                "effective ${llmResolution.effectiveBackend.displayName}, " +
-                "engine ${llmResolution.engineKind}\n" +
-                buildString {
-                    if (sttResolution.fallbackReason != null) {
-                        append("STT fallback: ${sttResolution.fallbackReason}\n")
-                    }
-                    if (llmResolution.fallbackReason != null) {
-                        append("LLM fallback: ${llmResolution.fallbackReason}\n")
-                    }
-                    append("Actual runtime fallback is also logged after engine initialization.")
-                }.trim()
+        binding.tvInferenceSummary.text = buildString {
+            appendLine(
+                getString(
+                    R.string.inference_summary_line,
+                    "STT",
+                    sttResolution.requestedBackend.displayName,
+                    sttResolution.effectiveBackend.displayName,
+                    sttResolution.engineKind,
+                )
+            )
+            appendLine(
+                getString(
+                    R.string.inference_summary_line,
+                    "LLM",
+                    llmResolution.requestedBackend.displayName,
+                    llmResolution.effectiveBackend.displayName,
+                    llmResolution.engineKind,
+                )
+            )
+            if (sttResolution.fallbackReason != null) {
+                appendLine(getString(R.string.pipeline_fallback_line, "STT", sttResolution.fallbackReason))
+            }
+            if (llmResolution.fallbackReason != null) {
+                appendLine(getString(R.string.pipeline_fallback_line, "LLM", llmResolution.fallbackReason))
+            }
+            append(getString(R.string.actual_runtime_fallback_note))
+        }.trim()
 
         binding.tvWhisperPath.text = buildString {
-            append("STT model: ${sttModel.displayName}\n")
-            append("Status: ${if (sttReady) "Ready" else "Missing"}\n")
-            append("Requested backend: ${sttResolution.requestedBackend.displayName}\n")
-            append("Effective backend: ${sttResolution.effectiveBackend.displayName}\n")
-            append("Engine: ${sttModel.engineKind}\n")
-            append("Supported backends: ${sttModel.supportedBackends.joinToString { it.displayName }}\n")
-            append("Path: ${ModelUtils.getModelFile(this@SettingsActivity, sttModel).absolutePath}\n")
+            appendLine(getString(R.string.model_detail_model, getString(R.string.stt_model), sttModel.displayName))
+            appendLine(getString(R.string.model_detail_status, readyLabel(sttReady)))
+            appendLine(getString(R.string.model_detail_requested_backend, sttResolution.requestedBackend.displayName))
+            appendLine(getString(R.string.model_detail_effective_backend, sttResolution.effectiveBackend.displayName))
+            appendLine(getString(R.string.model_detail_engine, sttModel.engineKind))
+            appendLine(
+                getString(
+                    R.string.model_detail_supported_backends,
+                    sttModel.supportedBackends.joinToString { it.displayName },
+                )
+            )
+            appendLine(getString(R.string.model_detail_path, ModelUtils.getModelFile(this@SettingsActivity, sttModel).absolutePath))
             if (sttDownloadSpecs.size > 1) {
-                append("Auxiliary files:\n")
+                appendLine(getString(R.string.model_detail_auxiliary_files))
                 sttDownloadSpecs.drop(1).forEach { spec ->
-                    append("- ${spec.displayName}: ${if (ModelUtils.isModelReady(this@SettingsActivity, spec)) "Ready" else "Missing"}\n")
+                    appendLine(
+                        getString(
+                            R.string.model_detail_auxiliary_status,
+                            spec.displayName,
+                            readyLabel(ModelUtils.isModelReady(this@SettingsActivity, spec)),
+                        )
+                    )
                 }
             }
-            append("Backend availability:\n")
+            appendLine(getString(R.string.model_detail_backend_availability))
             sttResolution.availabilities
                 .filter { it.backend != InferenceBackend.AUTO }
                 .forEach { availability ->
-                    append("- ${availability.backend.displayName}: ${if (availability.available) "Available" else "Unavailable"}")
-                    if (!availability.reason.isNullOrBlank()) {
-                        append(" (${availability.reason})")
-                    }
-                    append('\n')
+                    appendLine(backendAvailabilityLine(availability))
                 }
-            append("Notes: ${sttModel.description}")
+            append(getString(R.string.model_detail_notes, sttModel.description))
         }.trim()
 
         binding.tvLlamaPath.text = buildString {
-            append("LLM model: ${llmModel.displayName}\n")
-            append("Status: ${if (llmReady) "Ready" else "Missing"}\n")
-            append("Requested backend: ${llmResolution.requestedBackend.displayName}\n")
-            append("Effective backend: ${llmResolution.effectiveBackend.displayName}\n")
-            append("Engine: ${llmModel.engineKind}\n")
-            append("Supported backends: ${llmModel.supportedBackends.joinToString { it.displayName }}\n")
-            append("Experimental: ${if (llmModel.experimental) "Yes" else "No"}\n")
-            append("Path: ${ModelUtils.getModelFile(this@SettingsActivity, llmModel).absolutePath}\n")
-            append("Backend availability:\n")
+            appendLine(getString(R.string.model_detail_model, getString(R.string.llm_model), llmModel.displayName))
+            appendLine(getString(R.string.model_detail_status, readyLabel(llmReady)))
+            appendLine(getString(R.string.model_detail_requested_backend, llmResolution.requestedBackend.displayName))
+            appendLine(getString(R.string.model_detail_effective_backend, llmResolution.effectiveBackend.displayName))
+            appendLine(getString(R.string.model_detail_engine, llmModel.engineKind))
+            appendLine(
+                getString(
+                    R.string.model_detail_supported_backends,
+                    llmModel.supportedBackends.joinToString { it.displayName },
+                )
+            )
+            appendLine(getString(R.string.model_detail_experimental, yesNoLabel(llmModel.experimental)))
+            appendLine(getString(R.string.model_detail_path, ModelUtils.getModelFile(this@SettingsActivity, llmModel).absolutePath))
+            appendLine(getString(R.string.model_detail_backend_availability))
             llmResolution.availabilities
                 .filter { it.backend != InferenceBackend.AUTO }
                 .forEach { availability ->
-                    append("- ${availability.backend.displayName}: ${if (availability.available) "Available" else "Unavailable"}")
-                    if (!availability.reason.isNullOrBlank()) {
-                        append(" (${availability.reason})")
-                    }
-                    append('\n')
+                    appendLine(backendAvailabilityLine(availability))
                 }
-            append("Notes: ${llmModel.description}\n")
-            append("Missing selected files:\n$missingNames")
+            appendLine(getString(R.string.model_detail_notes, llmModel.description))
+            append(getString(R.string.model_detail_missing_selected_files, missingNames))
         }.trim()
+    }
+
+    private fun readyLabel(ready: Boolean): String =
+        getString(if (ready) R.string.ready_label else R.string.missing_label)
+
+    private fun yesNoLabel(value: Boolean): String =
+        getString(if (value) R.string.yes_label else R.string.no_label)
+
+    private fun backendAvailabilityLine(
+        availability: com.voicelog.util.BackendAvailability,
+    ): String {
+        val status = getString(
+            if (availability.available) R.string.available_label else R.string.unavailable_label
+        )
+        return if (availability.reason.isNullOrBlank()) {
+            getString(R.string.model_detail_backend_status, availability.backend.displayName, status)
+        } else {
+            getString(
+                R.string.model_detail_backend_status_reason,
+                availability.backend.displayName,
+                status,
+                availability.reason,
+            )
+        }
     }
 
     private fun bindModelSpinner(
@@ -350,5 +431,12 @@ class SettingsActivity : AppCompatActivity() {
             binding.radioLlmBackendCpu.isEnabled = isAvailable(InferenceBackend.CPU)
             binding.radioLlmBackendGpu.isEnabled = isAvailable(InferenceBackend.GPU)
         }
+    }
+
+    private data class LanguageListItem(
+        val option: AppLanguageOption,
+        val label: String,
+    ) {
+        override fun toString(): String = label
     }
 }

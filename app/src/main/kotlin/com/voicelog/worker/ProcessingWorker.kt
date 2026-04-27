@@ -20,6 +20,7 @@ import com.voicelog.inference.SummaryPromptBuilder
 import com.voicelog.inference.TranscriptionMetrics
 import com.voicelog.inference.TranscriptionEngine
 import com.voicelog.inference.WhisperTranscriptionEngine
+import com.voicelog.util.AppLanguagePreferences
 import com.voicelog.util.BackendResolution
 import com.voicelog.util.InferencePreferences
 import com.voicelog.util.InferenceRuntime
@@ -48,17 +49,19 @@ class ProcessingWorker(
         private const val STATUS_DONE = "done"
         private const val STATUS_FAILED = "failed"
 
-        private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.KOREA)
+        private val dateFmt = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     }
 
     override suspend fun doWork(): Result {
         val ctx = applicationContext
+        val localizedContext = AppLanguagePreferences.localizedContext(ctx)
         val db = AppDatabase.getInstance(ctx)
         val canRunStt = ProcessingPreferences.shouldRunSttNow(ctx)
         val canRunSummary = ProcessingPreferences.shouldRunSummaryNow(ctx)
+        val summaryLanguageName = AppLanguagePreferences.getSummaryLanguageName(localizedContext)
 
         Log.i(TAG, "Processing worker started")
-        setForeground(createForegroundInfo("Preparing models"))
+        setForeground(createForegroundInfo(localizedContext.getString(R.string.processing_preparing_models)))
 
         if (!canRunStt && !canRunSummary) {
             Log.i(TAG, "Skipping work because current policies do not allow processing right now")
@@ -123,7 +126,7 @@ class ProcessingWorker(
         val transcriptionEngine: TranscriptionEngine = WhisperTranscriptionEngine()
 
         if (needsWhisper) {
-            setForeground(createForegroundInfo("Loading Whisper model"))
+            setForeground(createForegroundInfo(localizedContext.getString(R.string.processing_loading_whisper)))
             Log.i(TAG, "Initializing Whisper")
             val whisperModelPath = InferencePreferences.getSelectedSttModelPath(ctx)
             val whisperVocabPath = ModelUtils.getWhisperVocabPath(ctx)
@@ -143,7 +146,11 @@ class ProcessingWorker(
                 db.recordingDao().updateStatus(recording.id, STATUS_TRANSCRIBING)
                 setForeground(
                     createForegroundInfo(
-                        message = "Transcribing ${index + 1}/${pendingTranscriptions.size}",
+                        message = localizedContext.getString(
+                            R.string.processing_transcribing_progress,
+                            index + 1,
+                            pendingTranscriptions.size,
+                        ),
                         current = index + 1,
                         total = pendingTranscriptions.size
                     )
@@ -218,7 +225,7 @@ class ProcessingWorker(
         val existingSummaryIds = pendingSummaries.mapTo(mutableSetOf()) { it.id }
         val llmModel = readyLlmModel ?: selectedLlmModel
 
-        setForeground(createForegroundInfo("Loading summary model"))
+        setForeground(createForegroundInfo(localizedContext.getString(R.string.processing_loading_summary_model)))
         Log.i(TAG, "Initializing summary engine")
         val summaryEngineInitStartedAt = SystemClock.elapsedRealtime()
         val summaryEngineHandle = SummaryEngineFactory.create(
@@ -253,7 +260,11 @@ class ProcessingWorker(
 
                     setForeground(
                         createForegroundInfo(
-                            message = "Summarizing recording ${index + 1}/${summaryCandidates.size}",
+                            message = localizedContext.getString(
+                                R.string.processing_summarizing_recording_progress,
+                                index + 1,
+                                summaryCandidates.size,
+                            ),
                             current = index + 1,
                             total = summaryCandidates.size
                         )
@@ -268,7 +279,11 @@ class ProcessingWorker(
                         continue
                     }
 
-                    val summaryPrompt = SummaryPromptBuilder.recordingPrompt(transcriptText)
+                    val summaryPrompt = SummaryPromptBuilder.recordingPrompt(
+                        transcript = transcriptText,
+                        outputLanguage = summaryLanguageName,
+                        context = localizedContext,
+                    )
                     val summaryResult = summaryEngine.generate(
                         summaryPrompt,
                         SummaryEngineFactory.RECORDING_MAX_TOKENS,
@@ -286,7 +301,11 @@ class ProcessingWorker(
                 for ((index, date) in processedDates.withIndex()) {
                     setForeground(
                         createForegroundInfo(
-                            message = "Summarizing ${index + 1}/${processedDates.size}",
+                            message = localizedContext.getString(
+                                R.string.processing_summarizing_daily_progress,
+                                index + 1,
+                                processedDates.size,
+                            ),
                             current = index + 1,
                             total = processedDates.size
                         )
@@ -303,6 +322,8 @@ class ProcessingWorker(
                     val prompt = SummaryPromptBuilder.dailyPrompt(
                         recordingSummaries = recordingSummaries,
                         fallbackTranscripts = transcripts.map { it.text },
+                        outputLanguage = summaryLanguageName,
+                        context = localizedContext,
                     )
                     val summaryResult = summaryEngine.generate(
                         prompt,
@@ -349,9 +370,10 @@ class ProcessingWorker(
         current: Int = 0,
         total: Int = 0
     ): ForegroundInfo {
+        val localizedContext = AppLanguagePreferences.localizedContext(applicationContext)
         val notification = NotificationCompat.Builder(applicationContext, VoiceLogApp.PROCESSING_CHANNEL_ID)
             .setSmallIcon(R.mipmap.ic_launcher)
-            .setContentTitle("VoiceLog processing")
+            .setContentTitle(localizedContext.getString(R.string.notification_processing_title))
             .setContentText(message)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
