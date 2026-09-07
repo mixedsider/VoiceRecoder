@@ -1,4 +1,4 @@
-# VoiceLog Acceleration Roadmap
+# VoiceRecoder Acceleration Roadmap
 
 ## Current State
 
@@ -54,5 +54,5 @@
 ## Implementation Notes
 
 - Google AI Edge Gallery currently uses `.task` and `.litertlm` model formats for accelerated LLM paths.
-- The current VoiceLog summary model is `.gguf`, so LiteRT-LM requires a parallel model pipeline instead of a drop-in swap.
+- The current VoiceRecoder summary model is `.gguf`, so LiteRT-LM requires a parallel model pipeline instead of a drop-in swap.
 - The current app `minSdk` is 26, while the latest Google Gallery Android app uses `minSdk` 31. Plan NPU rollout accordingly.

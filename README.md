@@ -1,10 +1,10 @@
-# VoiceLog
+# VoiceRecoder
 
 Language: [한국어](README.ko.md) | English
 
-VoiceLog is an on-device Android voice logging app. It records speech, transcribes it with local STT models, and generates per-recording and daily summaries with local LLM models.
+VoiceRecoder is an on-device Android voice logging app. It records speech, transcribes it with local STT models, and generates per-recording and daily summaries with local LLM models.
 
-Unlike cloud-first recording apps, VoiceLog is designed to solve the full workflow locally. After the required models are downloaded, recording, transcription, and summarization can run without an internet connection, keeping voice data on the device.
+Unlike cloud-first recording apps, VoiceRecoder is designed to solve the full workflow locally. After the required models are downloaded, recording, transcription, and summarization can run without an internet connection, keeping voice data on the device.
 
 The current build focuses on private local inference, configurable acceleration, battery-aware background processing, and safe CPU fallback when GPU or NNAPI acceleration is unavailable.
 
@@ -82,11 +82,11 @@ gradle :app:connectedDebugAndroidTest
 2. Grant the runtime permissions when prompted.
 3. Download the selected STT and LLM models from the first-run dialog or from Settings.
 4. Open Settings to choose STT model, LLM model, backend, and battery policy.
-5. Tap the record button. VoiceLog waits for speech, records a 60-second segment, then queues STT and summary work according to the configured policies.
+5. Tap the record button. VoiceRecoder waits for speech, records a 60-second segment, then queues STT and summary work according to the configured policies.
 
 ## Permissions
 
-VoiceLog requests required runtime permissions together on startup:
+VoiceRecoder requests required runtime permissions together on startup:
 
 - `RECORD_AUDIO`: required for voice recording.
 - `POST_NOTIFICATIONS`: Android 13+ only, recommended for recording/download/processing progress.
@@ -129,7 +129,7 @@ Defaults:
 
 ## Runtime Fallback
 
-VoiceLog separates requested backend from effective backend.
+VoiceRecoder separates requested backend from effective backend.
 
 Examples:
 

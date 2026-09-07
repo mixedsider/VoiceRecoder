@@ -1,4 +1,4 @@
-# VoiceLog Final Acceleration Plan
+# VoiceRecoder Final Acceleration Plan
 
 ## Priorities
 

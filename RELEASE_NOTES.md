@@ -1,6 +1,6 @@
-# VoiceLog v1.0.0
+# VoiceRecoder v1.0.0
 
-VoiceLog v1.0.0 is the first release focused on private, fully on-device voice logging.
+VoiceRecoder v1.0.0 is the first release focused on private, fully on-device voice logging.
 
 ## Highlights
 
